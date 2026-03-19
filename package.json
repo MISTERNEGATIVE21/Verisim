@@ -15,7 +15,8 @@
     "db:migrate": "bun x prisma migrate dev",
     "db:reset": "bun x prisma migrate reset",
     "electron:dev": "concurrently \"bun run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm rebuild @parcel/watcher && electron-builder"
+    "electron:build": "bun run build && electron-builder",
+    "rebuild": "npm rebuild"
   },
   "build": {
     "appId": "com.verilogsim.ide",
@@ -119,7 +120,7 @@
     "bun-types": "^1.3.4",
     "concurrently": "^9.1.0",
     "electron": "^33.2.1",
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^25.18.0",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
