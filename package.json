@@ -1,6 +1,6 @@
 {
   "name": "verilogsim-ide",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A modern, self-hosted Verilog IDE with live simulation and waveform viewing.",
   "author": "MISTERNEGATIVE21",
   "repository": {
@@ -40,15 +40,12 @@
       "**/*",
       "!.next/cache/**/*",
       "!node_modules/.cache/**/*",
-      "!node_modules/.bin/next",
       "!dist/**/*",
       "!.git/**/*",
       "!.github/**/*"
     ],
     "publish": {
-      "provider": "github",
-      "owner": "MISTERNEGATIVE21",
-      "repo": "Verisim"
+      "provider": "github"
     },
     "linux": {
       "icon": "public/logo.svg",
