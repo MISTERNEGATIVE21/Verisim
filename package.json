@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "A modern, self-hosted Verilog IDE with live simulation and waveform viewing.",
   "author": "MISTERNEGATIVE21",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MISTERNEGATIVE21/Verisim.git"
+  },
   "private": true,
   "main": "electron-main.js",
   "scripts": {
