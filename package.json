@@ -2,7 +2,7 @@
   "name": "verilogsim-ide",
   "version": "1.0.0",
   "description": "A modern, self-hosted Verilog IDE with live simulation and waveform viewing.",
-  "author": "misternegative21",
+  "author": "MISTERNEGATIVE21",
   "private": true,
   "main": "electron-main.js",
   "scripts": {
@@ -15,24 +15,37 @@
     "db:migrate": "bun x prisma migrate dev",
     "db:reset": "bun x prisma migrate reset",
     "electron:dev": "concurrently \"bun run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "bun run build && electron-builder",
+    "electron:build": "electron-builder",
     "rebuild": "npm rebuild"
   },
   "build": {
     "appId": "com.verilogsim.ide",
     "productName": "VerilogSim IDE",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/next",
+      "node_modules/.prisma",
+      "node_modules/@prisma/client",
+      "node_modules/prisma",
+      "node_modules/.bin"
+    ],
     "directories": {
       "output": "dist"
     },
     "files": [
       "**/*",
       "!.next/cache/**/*",
-      "!node_modules/.cache/**/*"
+      "!node_modules/.cache/**/*",
+      "!node_modules/.bin/next",
+      "!dist/**/*",
+      "!.git/**/*",
+      "!.github/**/*"
     ],
+    "publish": null,
     "linux": {
+      "icon": "public/logo.svg",
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "category": "Development"
     },

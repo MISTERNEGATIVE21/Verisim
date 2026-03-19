@@ -2,7 +2,7 @@
 
 A modern, self-hosted Verilog IDE with real-time simulation and waveform viewing. Built with Next.js, Electron, and Icarus Verilog.
 
-Maintainer: **misternegative21**
+Maintainer: **MISTERNEGATIVE21**
 
 ![VerilogSim Logo](public/logo.svg)
 
@@ -47,37 +47,12 @@ bun run electron:build
 ```
 
 ### Outputs (in `dist/` directory):
-- **Linux**: `.AppImage` and `.deb`
+- **Linux**: `.AppImage`
 - **Windows**: `.exe` (Installer and Portable)
-
-## GitHub Repository Setup
-
-To host this project on GitHub:
-
-1. Create a new repository on [GitHub](https://github.com/new).
-2. Run the following commands in your project root:
-
-```bash
-# Initialize git
-git init
-
-# Add all files
-git add .
-
-# Create initial commit
-git commit -m "Initial commit: VerilogSim IDE by misternegative21"
-
-# Add remote
-git remote add origin https://github.com/misternegative21/verilogsim.git
-
-# Push to GitHub
-git branch -M main
-git push -u origin main
-```
 
 ## Credits
 
-- **Author**: misternegative21
+- **Author**: MISTERNEGATIVE21
 - **HDL Engine**: [Icarus Verilog](https://github.com/steveicarus/iverilog)
 - **UI Components**: shadcn/ui & Radix UI
 - **Framework**: Next.js & Electron

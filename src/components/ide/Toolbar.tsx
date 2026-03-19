@@ -630,7 +630,7 @@ export function Toolbar() {
                     Run this script to automatically detect your OS and install Icarus Verilog:
                   </p>
                   <code className="block bg-muted p-2 rounded text-xs font-mono overflow-x-auto">
-                    curl -fsSL https://raw.githubusercontent.com/your-repo/verilog-sim/main/scripts/install-iverilog.sh | bash
+                    curl -fsSL https://raw.githubusercontent.com/MISTERNEGATIVE21/Verisim/main/scripts/install-iverilog.sh | bash
                   </code>
                 </div>
 

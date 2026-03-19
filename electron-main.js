@@ -25,11 +25,11 @@ function createWindow() {
     win.webContents.openDevTools();
   } else {
     // In production, start the Next.js server
-    // We use 'bun' if available, otherwise 'node'
-    const nextPath = path.join(__dirname, 'node_modules', '.bin', 'next');
+    // Use the unpacked path for the next binary since asar binaries cannot be spawned
+    const nextPath = path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'node_modules', '.bin', 'next');
     
     nextProcess = spawn(nextPath, ['start', '-p', '3000'], {
-      cwd: __dirname,
+      cwd: __dirname.replace('app.asar', 'app.asar.unpacked'),
       env: { ...process.env, NODE_ENV: 'production' }
     });
 
