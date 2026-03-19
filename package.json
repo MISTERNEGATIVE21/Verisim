@@ -15,7 +15,7 @@
     "db:migrate": "bun x prisma migrate dev",
     "db:reset": "bun x prisma migrate reset",
     "electron:dev": "concurrently \"bun run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "electron-builder",
+    "electron:build": "bun run build && electron-builder --publish always",
     "rebuild": "npm rebuild"
   },
   "build": {
@@ -41,7 +41,11 @@
       "!.git/**/*",
       "!.github/**/*"
     ],
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "MISTERNEGATIVE21",
+      "repo": "Verisim"
+    },
     "linux": {
       "icon": "public/logo.svg",
       "target": [

@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -36,11 +39,13 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
           DATABASE_URL: "file:./prisma/dev.db"
+          NODE_ENV: production
 
       - name: Build Desktop App
         run: bun run electron:build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_ENV: production
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -48,6 +53,8 @@ jobs:
           name: verilogsim-ide-${{ matrix.os }}
           path: |
             dist/*.AppImage
-            dist/*.deb
             dist/*.exe
             dist/*.zip
+            dist/*.deb
+            dist/*.blockmap
+            dist/*.yml
