@@ -15,7 +15,7 @@
     "db:migrate": "bun x prisma migrate dev",
     "db:reset": "bun x prisma migrate reset",
     "electron:dev": "concurrently \"bun run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "bun run build && electron-builder"
+    "electron:build": "npm rebuild @parcel/watcher && electron-builder"
   },
   "build": {
     "appId": "com.verilogsim.ide",
