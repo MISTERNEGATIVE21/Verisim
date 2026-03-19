@@ -45,7 +45,9 @@
       "!.github/**/*"
     ],
     "publish": {
-      "provider": "github"
+      "provider": "github",
+      "owner": "MISTERNEGATIVE21",
+      "repo": "Verisim"
     },
     "linux": {
       "icon": "public/logo.svg",
