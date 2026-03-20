@@ -2,6 +2,11 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
+// Disable hardware acceleration on Linux to prevent GPU/Wayland crashes (ENOMEM)
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration();
+}
+
 let nextProcess;
 
 function createWindow() {
