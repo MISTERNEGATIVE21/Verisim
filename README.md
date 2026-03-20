@@ -1,7 +1,9 @@
 # VerilogSim IDE
 
 A modern, high-performance Verilog IDE with real-time simulation and waveform viewing. Built with Next.js, Tauri, and Icarus Verilog.
-![Uploading {DC064833-D2D0-4216-81DE-43293716EA37}.png…]()
+
+<img width="590" height="446" alt="{DC064833-D2D0-4216-81DE-43293716EA37}" src="https://github.com/user-attachments/assets/67e7bf8b-2c6b-4978-82fb-400db7688731" />
+
 
 Maintainer: **MISTERNEGATIVE21**
 
