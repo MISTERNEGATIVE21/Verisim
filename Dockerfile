@@ -20,7 +20,7 @@ COPY . .
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+ENV PORT=3077
 ENV DATABASE_URL="file:/app/prisma/dev.db"
 
 # Build the application
@@ -32,7 +32,7 @@ COPY scripts/entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Expose the application port
-EXPOSE 3000
+EXPOSE 3077
 
 # Use entrypoint to handle database initialization
 ENTRYPOINT ["entrypoint.sh"]

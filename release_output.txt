@@ -1,0 +1,4 @@
+
+(app:144414): Gtk-WARNING **: 19:48:39.139: Theme parsing error: gtk.css:182:10: 'filter' is not a valid property name
+
+(WebKitWebProcess:144675): Gtk-WARNING **: 19:48:39.424: Theme parsing error: gtk.css:182:10: 'filter' is not a valid property name

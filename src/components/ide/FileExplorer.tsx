@@ -34,6 +34,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { 
+  createFile as tauriCreateFile, 
+  deleteFile as tauriDeleteFile, 
+  renameFile as tauriRenameFile 
+} from '@/lib/tauri-db';
 
 export function FileExplorer() {
   const { 
@@ -73,21 +78,11 @@ export function FileExplorer() {
       const isTb = newFileType === 'testbench';
       const name = newFileName.endsWith('.v') ? newFileName : `${newFileName}.v`;
       const moduleName = name.replace('.v', '');
+      const content = isTb 
+        ? `\`timescale 1ns/1ps\n\nmodule ${moduleName}();\n\n    initial begin\n        $dumpfile("${moduleName}.vcd");\n        $dumpvars(0, ${moduleName});\n        #100 $finish;\n    end\n\nendmodule` 
+        : `// Design file: ${name}\nmodule ${moduleName}(\n\n);\n\nendmodule`;
       
-      const response = await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          type: newFileType,
-          projectId: currentProject.id,
-          content: isTb 
-            ? `\`timescale 1ns/1ps\n\nmodule ${moduleName}();\n\n    initial begin\n        $dumpfile("${moduleName}.vcd");\n        $dumpvars(0, ${moduleName});\n        #100 $finish;\n    end\n\nendmodule` 
-            : `// Design file: ${name}\nmodule ${moduleName}(\n\n);\n\nendmodule`
-        }),
-      });
-      
-      const newFile = await response.json();
+      const newFile = await tauriCreateFile(currentProject.id, name, newFileType, content);
       
       const updatedProject = {
         ...currentProject,
@@ -110,16 +105,7 @@ export function FileExplorer() {
     
     try {
       const name = renameValue.endsWith('.v') ? renameValue : `${renameValue}.v`;
-      const response = await fetch('/api/files', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...editingFile,
-          name
-        }),
-      });
-      
-      const updatedFile = await response.json();
+      const updatedFile = await tauriRenameFile(editingFile.id, name);
       
       const updatedProject = {
         ...currentProject,
@@ -139,7 +125,7 @@ export function FileExplorer() {
     if (!confirm('Are you sure you want to delete this file?')) return;
     
     try {
-      await fetch(`/api/files?id=${fileId}`, { method: 'DELETE' });
+      await tauriDeleteFile(fileId);
       
       // Update local state
       closeFile(fileId);

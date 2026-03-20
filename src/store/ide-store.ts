@@ -5,17 +5,17 @@ export interface VerilogFile {
   name: string;
   content: string;
   type: string;
-  projectId: string;
-  createdAt: string;
-  updatedAt: string;
+  project_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Project {
   id: string;
   name: string;
   description: string | null;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
   files: VerilogFile[];
 }
 

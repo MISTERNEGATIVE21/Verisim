@@ -45,6 +45,13 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { 
+  fetchProjects as tauriFetchProjects, 
+  createProject as tauriCreateProject, 
+  deleteProject as tauriDeleteProject,
+  updateFile as tauriUpdateFile,
+  runSimulation as tauriRunSimulation
+} from '@/lib/tauri-db';
 
 const PROJECT_TEMPLATES = [
   { id: 'none', name: 'Empty Project', description: 'Start with a single blank Verilog file' },
@@ -123,8 +130,7 @@ export function Toolbar() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects');
-      const data = await response.json();
+      const data = await tauriFetchProjects();
       if (Array.isArray(data)) {
         setProjects(data);
       } else {
@@ -141,21 +147,12 @@ export function Toolbar() {
     
     setIsCreatingProject(true);
     try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newProjectName,
-          description: newProjectDesc,
-          template: selectedTemplate,
-        }),
-      });
+      const project = await tauriCreateProject(newProjectName, newProjectDesc, selectedTemplate);
       
-      if (!response.ok) {
+      if (!project) {
         throw new Error('Failed to create project');
       }
 
-      const project = await response.json();
       await fetchProjects();
       setCurrentProject(project);
       setNewProjectOpen(false);
@@ -173,7 +170,7 @@ export function Toolbar() {
     if (!confirm('Are you sure you want to delete this project and all its files?')) return;
     
     try {
-      await fetch(`/api/projects?id=${projectId}`, { method: 'DELETE' });
+      await tauriDeleteProject(projectId);
       if (currentProject?.id === projectId) {
         setCurrentProject(null);
       }
@@ -185,8 +182,7 @@ export function Toolbar() {
 
   const selectProject = async (projectId: string) => {
     try {
-      const response = await fetch(`/api/projects`);
-      const projects = await response.json();
+      const projects = await tauriFetchProjects();
       const project = projects.find((p: { id: string }) => p.id === projectId);
       if (project) {
         setCurrentProject(project);
@@ -203,16 +199,7 @@ export function Toolbar() {
     
     setSaving(true);
     try {
-      await fetch('/api/files', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: activeFile.id,
-          name: activeFile.name,
-          content: activeFile.content,
-          type: activeFile.type,
-        }),
-      });
+      await tauriUpdateFile(activeFile.id, activeFile.content);
     } catch (error) {
       console.error('Failed to save file:', error);
     } finally {
@@ -227,17 +214,8 @@ export function Toolbar() {
     setSimulationResult(null);
     
     try {
-      const response = await fetch('/api/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: currentProject.id,
-          files: currentProject.files,
-        }),
-      });
-      
-      const result = await response.json();
-      setSimulationResult(result);
+      const result = await tauriRunSimulation(currentProject.id, currentProject.files);
+      setSimulationResult(result as any);
     } catch (error) {
       console.error('Simulation failed:', error);
       setSimulationResult({
@@ -400,7 +378,7 @@ export function Toolbar() {
                           {project.description || 'No description'}
                         </span>
                         <span className="text-[10px] text-muted-foreground mt-1">
-                          Last updated: {new Date(project.updatedAt).toLocaleDateString()}
+                          Last updated: {new Date(project.updated_at).toLocaleDateString()}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

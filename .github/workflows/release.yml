@@ -11,58 +11,52 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - platform: "macos-latest" # for iPhone
+            args: "--target aarch64-apple-ios"
+          - platform: "macos-latest" # for MacOS
+            args: ""
+          - platform: "ubuntu-22.04"
+            args: ""
+          - platform: "windows-latest"
+            args: ""
 
+    runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Setup Node.js
+      - name: setup node
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - name: Install Dependencies
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+
+      - name: install frontend dependencies
         run: bun install
 
-      - name: Build Next.js App
-        run: bun run build
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-          DATABASE_URL: "file:./prisma/dev.db"
-          NODE_ENV: production
-
-      - name: Build Desktop App
-        run: bun run electron:build
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_ENV: production
-
-      - name: List dist contents
-        run: ls -R dist/
-        continue-on-error: true
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
         with:
-          name: verilogsim-ide-${{ matrix.os }}
-          if-no-files-found: error
-          path: |
-            dist/*.AppImage
-            dist/*.exe
-            dist/*.zip
-            dist/*.deb
-            dist/*.blockmap
-            dist/*.yml
+          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version
+          releaseName: "VerilogSim IDE v__VERSION__"
+          releaseBody: "See the assets below to download the latest version of VerilogSim IDE."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

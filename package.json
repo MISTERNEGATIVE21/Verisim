@@ -10,58 +10,15 @@
   "private": true,
   "main": "electron-main.js",
   "scripts": {
-    "dev": "next dev -p ${PORT:-3077} 2>&1 | tee dev.log",
+    "dev": "next dev -p 3077 2>&1 | tee dev.log",
     "build": "next build",
-    "start": "next start -p 3077",
+    "start": "next start -p ${PORT:-3077}",
     "lint": "eslint .",
     "db:push": "bun x prisma db push",
     "db:generate": "bun x prisma generate",
     "db:migrate": "bun x prisma migrate dev",
     "db:reset": "bun x prisma migrate reset",
-    "electron:dev": "concurrently \"bun run dev\" \"wait-on http://localhost:3077 && electron .\"",
-    "electron:build": "bun run build && electron-builder --publish always",
     "rebuild": "npm rebuild"
-  },
-  "build": {
-    "appId": "com.verilogsim.ide",
-    "productName": "VerilogSim IDE",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/next",
-      "node_modules/.prisma",
-      "node_modules/@prisma/client",
-      "node_modules/prisma",
-      "node_modules/.bin"
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "**/*",
-      "!.next/cache/**/*",
-      "!node_modules/.cache/**/*",
-      "!dist/**/*",
-      "!.git/**/*",
-      "!.github/**/*"
-    ],
-    "publish": {
-      "provider": "github",
-      "owner": "MISTERNEGATIVE21",
-      "repo": "Verisim"
-    },
-    "linux": {
-      "icon": "public/logo.svg",
-      "target": [
-        "AppImage"
-      ],
-      "category": "Development"
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
-    }
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -101,6 +58,14 @@
     "@reactuses/core": "^6.0.5",
     "@tanstack/react-query": "^5.82.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "~2",
+    "@tauri-apps/plugin-fs": "~2",
+    "@tauri-apps/plugin-log": "~2",
+    "@tauri-apps/plugin-os": "~2",
+    "@tauri-apps/plugin-process": "~2",
+    "@tauri-apps/plugin-shell": "~2",
+    "@tauri-apps/plugin-sql": "~2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -135,17 +100,14 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "bun-types": "^1.3.4",
-    "concurrently": "^9.1.0",
-    "electron": "^33.2.1",
-    "electron-builder": "^26.8.2",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5",
-    "wait-on": "^8.0.1"
+    "typescript": "^5"
   }
 }

@@ -1,9 +1,11 @@
 services:
-  verilogsim-ide:
+  verisim:
     build: .
     ports:
-      - "3001:3000"
+      - "3077:3077"
     environment:
       - DATABASE_URL=file:/app/prisma/dev.db
-      - PORT=3000
+      - PORT=3077
+    volumes:
+      - ./prisma/prisma:/app/prisma/prisma
     restart: unless-stopped
