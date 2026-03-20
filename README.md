@@ -47,7 +47,9 @@ bun x tauri build
 
 ## GPU Acceleration
 This application utilizes GPU acceleration via WebKit2GTK (Linux) and WebView2 (Windows). Ensure your graphics drivers are up to date for the best experience.
-
+<img width="587" height="363" alt="{10B9E4E9-995C-43E1-B174-9C64E2E52649}" src="https://github.com/user-attachments/assets/9c305017-58f7-4944-ac36-fd54053e8c68" />
+For windows add the path of win to System Environment Vaariables 
+For Linux install icarus verilog inside the system which is accessible globally 
 ## Credits
 
 - **Author**: MISTERNEGATIVE21
