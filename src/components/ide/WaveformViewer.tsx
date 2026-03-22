@@ -400,39 +400,93 @@ function WaveformSignal({ signal, maxTime, zoom, radix = 'hex' }: WaveformSignal
     const multiBitRegions: { x1: number, x2: number, value: string }[] = [];
     const height = 32;
     const margin = 6;
+    const resolution = 0.5 / zoom;
     
-    let lastY = height - margin;
-    let lastX = 0;
-    
-    for (let i = 0; i < signal.values.length; i++) {
-      const { time, value } = signal.values[i];
-      const x = (time / maxTime) * 100; // in percentage / viewBox units
+    if (signal.width === 1) {
+      let lastAddedX = -1;
+      let lastY = height - margin;
+      let pendingPoint: { x: number, y: number } | null = null;
       
-      if (signal.width === 1) {
-        const y = value === '1' ? margin : height - margin;
+      for (let i = 0; i < signal.values.length; i++) {
+        const { time, value } = signal.values[i];
+        const x = (time / maxTime) * 100; // in percentage / viewBox units
+        
+        let y = height - margin;
+        if (value === '1') {
+          y = margin;
+        } else if (value.toLowerCase() === 'x' || value.toLowerCase() === 'z') {
+          y = height / 2;
+        }
+
         if (i === 0) {
           points.push(`M 0 ${y}`);
+          if (x > 0) {
+            points.push(`L ${x} ${y}`);
+          }
+          lastAddedX = x;
+          lastY = y;
         } else {
-          points.push(`L ${x} ${lastY}`);
-          points.push(`L ${x} ${y}`);
-        }
-        lastY = y;
-      } else {
-        if (i > 0) {
-          multiBitRegions.push({ x1: lastX, x2: x, value: formatValue(signal.values[i-1].value) });
+          if (x - lastAddedX >= resolution || i === signal.values.length - 1) {
+            if (pendingPoint) {
+              points.push(`L ${pendingPoint.x} ${lastY}`);
+              points.push(`L ${pendingPoint.x} ${pendingPoint.y}`);
+              lastAddedX = pendingPoint.x;
+              lastY = pendingPoint.y;
+              pendingPoint = null;
+            }
+            points.push(`L ${x} ${lastY}`);
+            points.push(`L ${x} ${y}`);
+            lastAddedX = x;
+            lastY = y;
+          } else {
+            pendingPoint = { x, y };
+          }
         }
       }
-      lastX = x;
-    }
-    
-    if (signal.width > 1) {
-      multiBitRegions.push({ x1: lastX, x2: 100, value: formatValue(signal.values[signal.values.length - 1].value) });
-    } else {
+      
+      if (pendingPoint) {
+        points.push(`L ${pendingPoint.x} ${lastY}`);
+        points.push(`L ${pendingPoint.x} ${pendingPoint.y}`);
+        lastY = pendingPoint.y;
+      }
       points.push(`L 100 ${lastY}`);
+    } else {
+      let lastAddedX = 0;
+      let lastValue = signal.values[0].value;
+      let pendingRegion: { x: number, value: string } | null = null;
+
+      for (let i = 1; i < signal.values.length; i++) {
+        const { time, value } = signal.values[i];
+        const x = (time / maxTime) * 100;
+        
+        if (x - lastAddedX >= resolution || i === signal.values.length - 1) {
+          if (pendingRegion) {
+            multiBitRegions.push({ x1: lastAddedX, x2: pendingRegion.x, value: formatValue(lastValue) });
+            lastAddedX = pendingRegion.x;
+            lastValue = pendingRegion.value;
+            pendingRegion = null;
+          }
+          multiBitRegions.push({ x1: lastAddedX, x2: x, value: formatValue(lastValue) });
+          lastAddedX = x;
+          lastValue = value;
+        } else {
+          pendingRegion = { x, value };
+        }
+      }
+      
+      if (pendingRegion) {
+        multiBitRegions.push({ x1: lastAddedX, x2: pendingRegion.x, value: formatValue(lastValue) });
+        lastAddedX = pendingRegion.x;
+        lastValue = pendingRegion.value;
+      }
+      
+      if (lastAddedX < 100) {
+        multiBitRegions.push({ x1: lastAddedX, x2: 100, value: formatValue(signal.values[signal.values.length - 1].value) });
+      }
     }
     
     return { pathData: points.join(' '), multiBitRegions };
-  }, [signal, maxTime, radix]);
+  }, [signal, maxTime, radix, zoom]);
 
   return (
     <div className="relative w-full h-full">
@@ -499,6 +553,7 @@ function WaveformSignal({ signal, maxTime, zoom, radix = 'hex' }: WaveformSignal
       {signal.width > 1 && multiBitRegions.map((region, i) => {
         const { x1, x2, value } = region;
         if (x1 >= x2) return null;
+        if ((x2 - x1) * Math.max(1, zoom) < 2) return null;
         
         return (
           <div

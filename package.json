@@ -1,6 +1,6 @@
 {
   "name": "verisim-ide",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Verilog IDE with simulation and waveform viewing.",
   "author": "MISTERNEGATIVE21",
   "repository": {

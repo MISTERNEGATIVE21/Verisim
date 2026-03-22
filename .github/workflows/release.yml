@@ -15,8 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for iPhone
-            args: "--target aarch64-apple-ios"
           - platform: "macos-latest" # for MacOS
             args: ""
           - platform: "ubuntu-22.04"
@@ -61,3 +59,52 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  build-android:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: setup java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: setup android
+        uses: android-actions/setup-android@v3
+
+      - name: setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, i686-linux-android, x86_64-linux-android
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: install frontend dependencies
+        run: bun install
+
+      - name: build android
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: bunx tauri android build
+
+      - name: upload APK to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload master src-tauri/gen/android/app/build/outputs/apk/**/*.apk
