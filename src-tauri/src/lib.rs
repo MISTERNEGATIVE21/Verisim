@@ -88,17 +88,23 @@ fn get_projects(state: tauri::State<AppState>) -> Result<Vec<Project>, String> {
                     if let Ok(file_entries) = fs::read_dir(entry.path()) {
                         for file_entry in file_entries.flatten() {
                             let file_name = file_entry.file_name().into_string().unwrap_or_default();
-                            if file_name.ends_with(".v") || file_name.ends_with(".sv") {
-                                if let Ok(content) = fs::read_to_string(file_entry.path()) {
-                                    let is_tb = file_name.ends_with("_tb.v") || file_name.contains("testbench");
-                                    files.push(VerilogFile {
-                                        id: format!("{}:{}", project_id, file_name),
-                                        name: file_name,
-                                        content,
-                                        file_type: if is_tb { "testbench".into() } else { "verilog".into() },
-                                        project_id: project_id.clone(),
-                                    });
-                                }
+                            // Skip project.json metadata and hidden files
+                            if file_name == "project.json" || file_name.starts_with('.') {
+                                continue;
+                            }
+                            // Skip directories
+                            if file_entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                                continue;
+                            }
+                            if let Ok(content) = fs::read_to_string(file_entry.path()) {
+                                let file_type = detect_file_type(&file_name);
+                                files.push(VerilogFile {
+                                    id: format!("{}:{}", project_id, file_name),
+                                    name: file_name,
+                                    content,
+                                    file_type,
+                                    project_id: project_id.clone(),
+                                });
                             }
                         }
                     }
@@ -117,6 +123,18 @@ fn get_projects(state: tauri::State<AppState>) -> Result<Vec<Project>, String> {
     
     projects.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(projects)
+}
+
+fn detect_file_type(name: &str) -> String {
+    if name.ends_with("_tb.v") || name.contains("testbench") || name.ends_with("_tb.sv") {
+        "testbench".into()
+    } else if name.ends_with(".v") || name.ends_with(".sv") || name.ends_with(".vh") || name.ends_with(".svh") {
+        "verilog".into()
+    } else if name.ends_with(".mem") || name.ends_with(".hex") {
+        "memory".into()
+    } else {
+        "other".into()
+    }
 }
 
 #[tauri::command]
@@ -226,13 +244,13 @@ fn rename_file(state: tauri::State<AppState>, id: String, name: String) -> Resul
     }
     
     let content = fs::read_to_string(&new_path).unwrap_or_default();
-    let is_tb = name.ends_with("_tb.v") || name.contains("testbench");
+    let file_type = detect_file_type(&name);
     
     Ok(VerilogFile {
         id: format!("{}:{}", project_id, name),
         name: name.clone(),
         content,
-        file_type: if is_tb { "testbench".into() } else { "verilog".into() },
+        file_type,
         project_id,
     })
 }

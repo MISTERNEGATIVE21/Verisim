@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "verilogsim-ide",
+  "productName": "verisim-ide",
   "version": "0.1.0",
   "identifier": "com.verisim.ide",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Verisim",
+        "title": "Verisim IDE",
         "width": 800,
         "height": 600,
         "resizable": true,

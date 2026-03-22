@@ -237,7 +237,7 @@ export function Toolbar() {
       <div className="flex items-center justify-between w-full md:w-auto gap-4">
         <div className="flex items-center gap-2">
           <Code2 className="h-6 w-6 text-blue-500" />
-          <span className="font-bold text-lg hidden sm:inline">VerilogSim</span>
+          <span className="font-bold text-lg hidden sm:inline">Verisim</span>
           <Badge variant="secondary" className="text-xs">IDE</Badge>
         </div>
         
@@ -470,10 +470,10 @@ export function Toolbar() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <BookOpen className="h-5 w-5" />
-                VerilogSim IDE Documentation
+                Verisim IDE Documentation
               </DialogTitle>
               <DialogDescription>
-                Learn how to use the VerilogSim IDE for digital logic design
+                Learn how to use the Verisim IDE for digital logic design
               </DialogDescription>
             </DialogHeader>
             
@@ -613,6 +613,27 @@ export function Toolbar() {
                   <code className="block bg-muted p-2 rounded text-xs font-mono overflow-x-auto">
                     curl -fsSL https://raw.githubusercontent.com/MISTERNEGATIVE21/Verisim/main/scripts/install-iverilog.sh | bash
                   </code>
+                </div>
+
+                {/* Android */}
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Cpu className="h-4 w-4 text-green-500" />
+                    Android (Termux)
+                  </h4>
+                  <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
+                    <div className="text-blue-500 font-semibold"># Install Termux from F-Droid</div>
+                    <div>pkg update && pkg upgrade</div>
+                    <div>pkg install tmux iverilog</div>
+                    <div className="mt-2 text-muted-foreground"># Start a tmux session (keeps simulation running):</div>
+                    <div>tmux new -s sim</div>
+                    <div className="mt-2 text-muted-foreground"># Verify installation:</div>
+                    <div>iverilog -V</div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    On Android, install <strong>Termux</strong> from F-Droid (not Google Play). 
+                    Use <strong>tmux</strong> to keep simulation sessions alive in the background.
+                  </p>
                 </div>
 
                 {/* Windows */}

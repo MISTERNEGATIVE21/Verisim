@@ -13,7 +13,9 @@ import {
   FilePlus,
   Trash2,
   X,
-  Edit2
+  Edit2,
+  File,
+  Database
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -61,27 +63,20 @@ export function FileExplorer() {
 
   if (sidebarCollapsed || !currentProject) return null;
 
-  const getFileIcon = (type: string) => {
-    switch (type) {
-      case 'testbench':
-        return <FileCog className="h-4 w-4 text-amber-500" />;
-      default:
-        return <FileCode className="h-4 w-4 text-blue-500" />;
-    }
+  const getFileIcon = (type: string, name: string) => {
+    if (type === 'testbench') return <FileCog className="h-4 w-4 text-amber-500" />;
+    if (type === 'memory') return <Database className="h-4 w-4 text-purple-500" />;
+    if (type === 'verilog') return <FileCode className="h-4 w-4 text-blue-500" />;
+    return <File className="h-4 w-4 text-muted-foreground" />;
   };
 
-  const createFile = async () => {
-    if (!newFileName.trim() || !currentProject) return;
-    
-    setIsCreating(true);
-    try {
-      const isTb = newFileType === 'testbench';
-      const name = newFileName.endsWith('.v') ? newFileName : `${newFileName}.v`;
-      const moduleName = name.replace('.v', '');
-      const content = isTb 
-        ? `\`timescale 1ns/1ps
+  const getDefaultContent = (name: string, type: string): string => {
+    const baseName = name.replace(/\.[^/.]+$/, ''); // strip extension
 
-module ${moduleName}();
+    if (type === 'testbench') {
+      return `\`timescale 1ns/1ps
+
+module ${baseName}();
 
     // Inputs
     reg clk;
@@ -117,13 +112,51 @@ module ${moduleName}();
 
     // Generate VCD for waveform viewing
     initial begin
-        $dumpfile("${moduleName}.vcd");
-        $dumpvars(0, ${moduleName});
+        $dumpfile("${baseName}.vcd");
+        $dumpvars(0, ${baseName});
     end
 
-endmodule` 
-        : `// Design file: ${name}\nmodule ${moduleName}(\n\n);\n\nendmodule`;
-      
+endmodule`;
+    }
+
+    if (type === 'verilog') {
+      return `module ${baseName}(
+
+);
+
+endmodule`;
+    }
+
+    if (type === 'memory') {
+      return `// Memory initialization file
+// One value per line, hex format
+00
+01
+02
+03`;
+    }
+
+    // Generic empty file
+    return '';
+  };
+
+  const createFile = async () => {
+    if (!newFileName.trim() || !currentProject) return;
+    
+    setIsCreating(true);
+    try {
+      // Use the filename as-is. If it has no extension, add one based on type.
+      let name = newFileName.trim();
+      if (!name.includes('.')) {
+        switch (newFileType) {
+          case 'testbench': name += '_tb.v'; break;
+          case 'verilog': name += '.v'; break;
+          case 'memory': name += '.mem'; break;
+          default: name += '.txt'; break;
+        }
+      }
+
+      const content = getDefaultContent(name, newFileType);
       const newFile = await tauriCreateFile(currentProject.id, name, newFileType, content);
       
       const updatedProject = {
@@ -146,12 +179,12 @@ endmodule`
     if (!editingFile || !renameValue.trim()) return;
     
     try {
-      const name = renameValue.endsWith('.v') ? renameValue : `${renameValue}.v`;
+      const name = renameValue.trim();
       const updatedFile = await tauriRenameFile(editingFile.id, name);
       
       const updatedProject = {
         ...currentProject,
-        files: currentProject.files.map(f => f.id === updatedFile.id ? updatedFile : f)
+        files: currentProject.files.map(f => f.id === editingFile.id ? updatedFile : f)
       };
       setCurrentProject(updatedProject);
       
@@ -169,7 +202,6 @@ endmodule`
     try {
       await tauriDeleteFile(fileId);
       
-      // Update local state
       closeFile(fileId);
       const updatedProject = {
         ...currentProject,
@@ -184,6 +216,8 @@ endmodule`
   const files = currentProject.files || [];
   const verilogFiles = files.filter(f => f.type === 'verilog');
   const testbenchFiles = files.filter(f => f.type === 'testbench');
+  const memoryFiles = files.filter(f => f.type === 'memory');
+  const otherFiles = files.filter(f => !['verilog', 'testbench', 'memory'].includes(f.type));
 
   return (
     <div className="h-full flex flex-col bg-muted/30 border-r border-border">
@@ -195,18 +229,9 @@ endmodule`
           <Button 
             variant="ghost" 
             size="icon" 
-            className="h-6 w-6 text-blue-500" 
-            onClick={() => { setNewFileType('verilog'); setNewFileOpen(true); }}
-            title="New Design File"
-          >
-            <FilePlus className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6 text-amber-500" 
-            onClick={() => { setNewFileType('testbench'); setNewFileName(''); setNewFileOpen(true); }}
-            title="New Testbench"
+            className="h-6 w-6" 
+            onClick={() => { setNewFileType('verilog'); setNewFileName(''); setNewFileOpen(true); }}
+            title="New File"
           >
             <FilePlus className="h-4 w-4" />
           </Button>
@@ -215,7 +240,6 @@ endmodule`
       
       <ScrollArea className="flex-1">
         <div className="p-1">
-          {/* Project Section */}
           <div className="mb-2">
             <button
               onClick={() => setExpanded(!expanded)}
@@ -246,7 +270,7 @@ endmodule`
                         onClick={() => openFile(file)}
                         onRename={(f) => { setEditingFile(f); setRenameValue(f.name); setRenameOpen(true); }}
                         onDelete={(e) => deleteFile(e, file.id)}
-                        icon={getFileIcon(file.type)}
+                        icon={getFileIcon(file.type, file.name)}
                       />
                     ))}
                   </div>
@@ -266,7 +290,47 @@ endmodule`
                         onClick={() => openFile(file)}
                         onRename={(f) => { setEditingFile(f); setRenameValue(f.name); setRenameOpen(true); }}
                         onDelete={(e) => deleteFile(e, file.id)}
-                        icon={getFileIcon(file.type)}
+                        icon={getFileIcon(file.type, file.name)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Memory Files */}
+                {memoryFiles.length > 0 && (
+                  <div className="mb-1">
+                    <div className="text-[10px] text-muted-foreground px-2 py-1 uppercase font-bold opacity-50">
+                      Memory
+                    </div>
+                    {memoryFiles.map((file) => (
+                      <FileItem 
+                        key={file.id} 
+                        file={file} 
+                        isActive={activeFile?.id === file.id}
+                        onClick={() => openFile(file)}
+                        onRename={(f) => { setEditingFile(f); setRenameValue(f.name); setRenameOpen(true); }}
+                        onDelete={(e) => deleteFile(e, file.id)}
+                        icon={getFileIcon(file.type, file.name)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Other Files */}
+                {otherFiles.length > 0 && (
+                  <div className="mb-1">
+                    <div className="text-[10px] text-muted-foreground px-2 py-1 uppercase font-bold opacity-50">
+                      Other
+                    </div>
+                    {otherFiles.map((file) => (
+                      <FileItem 
+                        key={file.id} 
+                        file={file} 
+                        isActive={activeFile?.id === file.id}
+                        onClick={() => openFile(file)}
+                        onRename={(f) => { setEditingFile(f); setRenameValue(f.name); setRenameOpen(true); }}
+                        onDelete={(e) => deleteFile(e, file.id)}
+                        icon={getFileIcon(file.type, file.name)}
                       />
                     ))}
                   </div>
@@ -281,23 +345,44 @@ endmodule`
       <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Create New {newFileType === 'testbench' ? 'Testbench' : 'Design File'}</DialogTitle>
+            <DialogTitle>Create New File</DialogTitle>
             <DialogDescription>
-              {newFileType === 'testbench' 
-                ? 'Creates a testbench with boilerplate for waveforms.' 
-                : 'Creates a new Verilog module file.'}
+              Add a new file to the project.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="fileType">File Type</Label>
+              <Select value={newFileType} onValueChange={setNewFileType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="verilog">Verilog Module (.v)</SelectItem>
+                  <SelectItem value="testbench">Testbench (.v)</SelectItem>
+                  <SelectItem value="memory">Memory File (.mem)</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="fileName">File Name</Label>
               <Input
                 id="fileName"
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
-                placeholder={newFileType === 'testbench' ? 'tb_module.v' : 'module_name.v'}
+                placeholder={
+                  newFileType === 'testbench' ? 'module_tb' :
+                  newFileType === 'memory' ? 'init_data' :
+                  newFileType === 'other' ? 'readme.txt' :
+                  'module_name'
+                }
                 autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') createFile(); }}
               />
+              <p className="text-xs text-muted-foreground">
+                Extension will be added automatically if not provided.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -305,7 +390,7 @@ endmodule`
               Cancel
             </Button>
             <Button onClick={createFile} disabled={!newFileName.trim() || isCreating}>
-              {isCreating ? 'Creating...' : 'Create File'}
+              {isCreating ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -325,6 +410,7 @@ endmodule`
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') renameFile(); }}
               />
             </div>
           </div>
