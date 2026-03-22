@@ -14,9 +14,11 @@ import {
   Activity, 
   ZoomIn, 
   ZoomOut, 
-  Maximize2
+  Maximize2,
+  ExternalLink
 } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface VCDSignal {
   name: string;
@@ -94,7 +96,7 @@ function parseVCD(content: string): VCDData | null {
             const lastVal = signal.values[signal.values.length - 1];
             if (lastVal && lastVal.time === currentTime) {
               lastVal.value = value;
-            } else {
+            } else if (!lastVal || lastVal.value !== value) {
               signal.values.push({ time: currentTime, value });
             }
           }
@@ -109,7 +111,7 @@ function parseVCD(content: string): VCDData | null {
               const lastVal = signal.values[signal.values.length - 1];
               if (lastVal && lastVal.time === currentTime) {
                 lastVal.value = value;
-              } else {
+              } else if (!lastVal || lastVal.value !== value) {
                 signal.values.push({ time: currentTime, value });
               }
             }
@@ -131,8 +133,59 @@ export function WaveformViewer() {
   const [zoom, setZoom] = useState(1);
   const [radix, setRadix] = useState<'bin' | 'dec' | 'hex'>('hex');
   const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const waveformAreaRef = useRef<HTMLDivElement>(null);
+
+  const handlePip = async () => {
+    // @ts-ignore
+    if (!('documentPictureInPicture' in window)) {
+      alert("Picture-in-Picture is not supported in this environment.");
+      return;
+    }
+    
+    // @ts-ignore
+    if (window.documentPictureInPicture.window) {
+      return;
+    }
+
+    try {
+      // @ts-ignore
+      const pip = await window.documentPictureInPicture.requestWindow({
+        width: 800,
+        height: 600,
+      });
+      
+      [...document.styleSheets].forEach((styleSheet) => {
+        try {
+          const cssRules = [...(styleSheet.cssRules as any)].map((rule: any) => rule.cssText).join('');
+          const style = document.createElement('style');
+          style.textContent = cssRules;
+          pip.document.head.appendChild(style);
+        } catch (e) {
+          if (styleSheet.href) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = styleSheet.href;
+            pip.document.head.appendChild(link);
+          }
+        }
+      });
+      
+      pip.document.documentElement.className = document.documentElement.className;
+      pip.document.body.className = document.body.className;
+      pip.document.body.classList.add('bg-background');
+      
+      pip.addEventListener("pagehide", () => {
+        setPipWindow(null);
+      });
+      
+      setPipWindow(pip);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to detach waveform window.");
+    }
+  };
 
   const formatSignalValue = (val: string, width: number, currentRadix: string) => {
     if (width === 1) return val;
@@ -212,6 +265,11 @@ export function WaveformViewer() {
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
             {vcdData.signals.length} signals
           </span>
+          {pipWindow && (
+            <span className="text-[10px] text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+              Detached
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <Select value={radix} onValueChange={(v: any) => setRadix(v)}>
@@ -253,11 +311,22 @@ export function WaveformViewer() {
           >
             <Maximize2 className="h-3 w-3" />
           </Button>
+          {!pipWindow && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePip}
+              className="h-7 w-7 p-0 ml-1 text-blue-500 hover:text-blue-600"
+              title="Detach to PIP Window"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Waveform Display */}
-      <div className="flex-1 flex overflow-hidden" ref={containerRef}>
+      {pipWindow ? createPortal(
+      <div className="flex-1 flex overflow-hidden w-full h-full" ref={containerRef}>
         {/* Signal Names */}
         <div className="w-48 flex-shrink-0 border-r border-border bg-background flex flex-col z-20">
           <div className="h-8 border-b border-border bg-muted/50 px-3 flex items-center justify-between">
@@ -344,7 +413,96 @@ export function WaveformViewer() {
             )}
           </div>
         </div>
+      </div>, pipWindow.document.body) : (
+      <div className="flex-1 flex overflow-hidden" ref={containerRef}>
+        {/* Signal Names */}
+        <div className="w-48 flex-shrink-0 border-r border-border bg-background flex flex-col z-20">
+          <div className="h-8 border-b border-border bg-muted/50 px-3 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Signal</span>
+            <span className="text-[10px] text-muted-foreground">{hoverTime !== null ? `${hoverTime}ns` : ''}</span>
+          </div>
+          <ScrollArea className="h-[calc(100%-2rem)]">
+            {vcdData.signals.map((signal, index) => {
+              const currentValue = hoverTime !== null ? getSignalValueAtTime(signal, hoverTime) : null;
+              return (
+                <div
+                  key={`${signal.symbol}-${index}`}
+                  className="h-8 border-b border-border/50 px-3 flex items-center hover:bg-muted/50"
+                >
+                  <span className="text-xs font-mono truncate" title={signal.name}>
+                    {signal.name}
+                  </span>
+                  <span className="ml-1 text-[9px] text-muted-foreground opacity-50">
+                    {signal.width > 1 ? `[${signal.width}]` : ''}
+                  </span>
+                  {currentValue !== null && (
+                    <span className="ml-auto text-xs font-mono font-medium text-blue-500">
+                      {currentValue}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </ScrollArea>
+        </div>
+
+        {/* Waveforms */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto w-full">
+          {/* Time Ruler */}
+          <div className="h-8 border-b border-border bg-muted/50 flex items-end sticky top-0 z-10 w-full min-w-max">
+            <div className="flex text-xs text-muted-foreground" style={{ width: `${Math.max(100, 100 * zoom)}%` }}>
+              {Array.from({ length: Math.max(5, Math.ceil(10 * zoom)) }, (_, i) => (
+                <div
+                  key={i}
+                  className="flex-shrink-0 border-l border-border pl-1"
+                  style={{ width: `${100 / zoom}%` }}
+                >
+                  {Math.round((i * vcdData.maxTime) / (10 * zoom))}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Signal Waveforms */}
+          <div 
+            style={{ width: `${Math.max(100, 100 * zoom)}%` }}
+            ref={waveformAreaRef}
+            className="relative cursor-crosshair pb-4 w-full h-full"
+            onMouseMove={(e) => {
+              if (!vcdData || !waveformAreaRef.current) return;
+              const rect = waveformAreaRef.current.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const width = rect.width;
+              let t = Math.round((x / width) * vcdData.maxTime);
+              t = Math.max(0, Math.min(t, vcdData.maxTime));
+              setHoverTime(t);
+            }}
+            onMouseLeave={() => setHoverTime(null)}
+          >
+            {vcdData.signals.map((signal, index) => (
+              <div
+                key={`${signal.symbol}-${index}`}
+                className="h-8 border-b border-border/50 relative w-full"
+              >
+                <WaveformSignal signal={signal} maxTime={vcdData.maxTime} zoom={zoom} radix={radix} />
+              </div>
+            ))}
+
+            {/* Tracking Cursor Line */}
+            {hoverTime !== null && (
+              <div 
+                className="absolute top-0 bottom-0 border-l border-red-500 z-30 pointer-events-none"
+                style={{ left: `${(hoverTime / vcdData.maxTime) * 100}%` }}
+              >
+                <div className="absolute top-0 -translate-x-1/2 -mt-4 bg-red-500 text-white text-[9px] px-1 rounded shadow pointer-events-none whitespace-nowrap">
+                  {hoverTime} {vcdData.timescale}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+      )}
     </div>
   );
 }
