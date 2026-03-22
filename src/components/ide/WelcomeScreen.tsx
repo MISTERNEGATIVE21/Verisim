@@ -1,8 +1,12 @@
 'use client';
 
 import { Cpu, FileCode, Plus, FolderOpen, ExternalLink, Github, Heart, BookOpen, Clock } from 'lucide-react';
+import { useIDEStore } from '@/store/ide-store';
+import { openProjectFile } from '@/lib/tauri-db';
 
 export function WelcomeScreen() {
+  const { setIsNewProjectDialogOpen } = useIDEStore();
+
   return (
     <div className="h-full flex flex-col items-center justify-center bg-background p-8">
       <div className="max-w-lg w-full space-y-6">
@@ -20,19 +24,25 @@ export function WelcomeScreen() {
 
         {/* Quick Actions */}
         <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer">
+          <div 
+            onClick={() => setIsNewProjectDialogOpen(true)}
+            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+          >
             <Plus className="h-5 w-5 text-blue-500 shrink-0" />
-            <div>
+            <div className="text-left">
               <p className="text-sm font-medium">New Project</p>
               <p className="text-xs text-muted-foreground">Create a project from scratch or use a template</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer">
+          <div 
+            onClick={openProjectFile}
+            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+          >
             <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
-            <div>
+            <div className="text-left">
               <p className="text-sm font-medium">Open Project</p>
-              <p className="text-xs text-muted-foreground">Load an existing project from your workspace</p>
+              <p className="text-xs text-muted-foreground">Load a .vsm file from your system</p>
             </div>
           </div>
         </div>
@@ -97,7 +107,7 @@ export function WelcomeScreen() {
           
           <div className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
-            <span>v0.1.0</span>
+            <span>v1.0.0</span>
           </div>
 
           <div className="flex items-center gap-1.5">

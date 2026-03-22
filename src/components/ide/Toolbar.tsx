@@ -43,13 +43,13 @@ import {
   Trash2,
   FolderOpen
 } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { 
-  fetchProjects as tauriFetchProjects, 
-  createProject as tauriCreateProject, 
-  deleteProject as tauriDeleteProject,
-  updateFile as tauriUpdateFile,
+  createNewProject,
+  saveProjectFile,
+  openProjectFile,
   runSimulation as tauriRunSimulation
 } from '@/lib/tauri-db';
 
@@ -88,19 +88,12 @@ export function Toolbar() {
     activeFile,
   } = useIDEStore();
   
-  const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [openProjectDialog, setOpenProjectDialog] = useState(false);
+  const { isNewProjectDialogOpen, setIsNewProjectDialogOpen } = useIDEStore();
   const [docsOpen, setDocsOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('none');
   const [saving, setSaving] = useState(false);
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-
-  // Fetch projects on mount
-  useEffect(() => {
-    fetchProjects();
-  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -109,7 +102,7 @@ export function Toolbar() {
         switch (e.key.toLowerCase()) {
           case 's':
             e.preventDefault();
-            saveFile();
+            saveProject();
             break;
           case 'enter':
             e.preventDefault();
@@ -117,7 +110,7 @@ export function Toolbar() {
             break;
           case 'n':
             e.preventDefault();
-            setNewProjectOpen(true);
+            setIsNewProjectDialogOpen(true);
             break;
           case 'b':
             e.preventDefault();
@@ -131,84 +124,40 @@ export function Toolbar() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [sidebarCollapsed, activeFile, currentProject, isSimulating]);
 
-  const fetchProjects = async () => {
-    try {
-      const data = await tauriFetchProjects();
-      if (Array.isArray(data)) {
-        setProjects(data);
-      } else {
-        setProjects([]);
-      }
-    } catch (error) {
-      console.error('Failed to fetch projects:', error);
-      setProjects([]);
-    }
-  };
-
-  const createProject = async () => {
-    if (!newProjectName.trim() || isCreatingProject) return;
+  const createProject = () => {
+    if (!newProjectName.trim()) return;
     
-    setIsCreatingProject(true);
     try {
-      const project = await tauriCreateProject(newProjectName, newProjectDesc, selectedTemplate);
-      
-      if (!project) {
-        throw new Error('Failed to create project');
-      }
-
-      await fetchProjects();
-      setCurrentProject(project);
-      setNewProjectOpen(false);
+      createNewProject(newProjectName, newProjectDesc, selectedTemplate);
+      setIsNewProjectDialogOpen(false);
       setNewProjectName('');
       setNewProjectDesc('');
+      setSimulationResult(null);
+      setShowWaveform(false);
     } catch (error) {
       console.error('Failed to create project:', error);
       alert('Failed to create project. Please try again.');
-    } finally {
-      setIsCreatingProject(false);
     }
   };
 
-  const deleteProject = async (projectId: string) => {
-    if (!confirm('Are you sure you want to delete this project and all its files?')) return;
-    
-    try {
-      await tauriDeleteProject(projectId);
-      if (currentProject?.id === projectId) {
-        setCurrentProject(null);
-      }
-      await fetchProjects();
-    } catch (error) {
-      console.error('Failed to delete project:', error);
-    }
+  const closeProject = () => {
+    setCurrentProject(null);
+    setSimulationResult(null);
+    setShowWaveform(false);
   };
 
-  const selectProject = async (projectId: string) => {
-    try {
-      const projects = await tauriFetchProjects();
-      const project = projects.find((p: { id: string }) => p.id === projectId);
-      if (project) {
-        setCurrentProject(project);
-        setSimulationResult(null);
-        setShowWaveform(false);
-      }
-    } catch (error) {
-      console.error('Failed to select project:', error);
-    }
-  };
-
-  const saveFile = useCallback(async () => {
-    if (!activeFile) return;
+  const saveProject = useCallback(async () => {
+    if (!currentProject) return;
     
     setSaving(true);
     try {
-      await tauriUpdateFile(activeFile.id, activeFile.content);
+      await saveProjectFile(false);
     } catch (error) {
-      console.error('Failed to save file:', error);
+      console.error('Failed to save project:', error);
     } finally {
       setTimeout(() => setSaving(false), 500);
     }
-  }, [activeFile]);
+  }, [currentProject]);
 
   const runSimulation = useCallback(async () => {
     if (!currentProject || isSimulating) return;
@@ -242,28 +191,18 @@ export function Toolbar() {
         </div>
         
         {currentProject && (
-          <div className="flex items-center gap-1">
-            <Select value={currentProject.id} onValueChange={selectProject}>
-              <SelectTrigger className="w-[150px] sm:w-[200px] h-8 text-xs sm:text-sm">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.isArray(projects) && projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-
-            </Select>
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">{currentProject.name}</span>
+            </div>
             <Button 
               variant="ghost" 
-              size="icon" 
-              className="h-8 w-8 text-muted-foreground hover:text-red-500"
-              onClick={() => deleteProject(currentProject.id)}
-              title="Delete Project"
+              size="sm" 
+              className="h-8 text-muted-foreground hover:text-foreground"
+              onClick={closeProject}
+              title="Close Project"
             >
-              <Trash2 className="h-4 w-4" />
+              Close
             </Button>
           </div>
         )}
@@ -272,7 +211,7 @@ export function Toolbar() {
       {/* Center Section - Actions */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 max-w-full no-scrollbar">
         {/* New Project Dialog */}
-        <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
+        <Dialog open={isNewProjectDialogOpen} onOpenChange={setIsNewProjectDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 shrink-0">
               <Plus className="h-4 w-4 mr-1" />
@@ -330,97 +269,34 @@ export function Toolbar() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setNewProjectOpen(false)}>
+              <Button variant="outline" onClick={() => setIsNewProjectDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={createProject} disabled={!newProjectName.trim() || isCreatingProject}>
+              <Button onClick={createProject} disabled={!newProjectName.trim()}>
                 Create Project
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Open Project Dialog */}
-        <Dialog open={openProjectDialog} onOpenChange={setOpenProjectDialog}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 shrink-0">
-              <FolderOpen className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Open Project</span>
-              <span className="sm:hidden">Open</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px] w-[95vw] sm:w-full">
-            <DialogHeader>
-              <DialogTitle>Open Project</DialogTitle>
-              <DialogDescription>
-                Select a project to continue working.
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="h-[300px] pr-4">
-              <div className="space-y-2">
-                {!Array.isArray(projects) || projects.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No projects found. Create a new one!
-                  </div>
-                ) : (
-                  projects.map((project) => (
-                    <div 
-                      key={project.id}
-                      className={cn(
-                        "flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent group transition-colors cursor-pointer",
-                        currentProject?.id === project.id && "bg-accent border-blue-500/50"
-                      )}
-                      onClick={() => {
-                        selectProject(project.id);
-                        setOpenProjectDialog(false);
-                      }}
-                    >
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-medium truncate">{project.name}</span>
-                        <span className="text-xs text-muted-foreground truncate">
-                          {project.description || 'No description'}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground mt-1">
-                          Last updated: {new Date(project.updated_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteProject(project.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                        <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-blue-500" />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpenProjectDialog(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Open Project */}
+        <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={openProjectFile}>
+          <FolderOpen className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">Open Project</span>
+          <span className="sm:hidden">Open</span>
+        </Button>
 
         {/* Save Button */}
         <Button
           variant="outline"
           size="sm"
           className="h-8 shrink-0"
-          onClick={saveFile}
-          disabled={!activeFile || saving}
+          onClick={saveProject}
+          disabled={!currentProject || saving}
+          title="Save Project (Ctrl+S)"
         >
           <Save className={cn("h-4 w-4 mr-1", saving && "text-green-500")} />
-          <span className="hidden sm:inline">{saving ? 'Saved!' : 'Save'}</span>
+          <span className="hidden sm:inline">{saving ? 'Saved!' : 'Save Project'}</span>
         </Button>
 
         {/* Run Simulation Button */}
@@ -447,6 +323,8 @@ export function Toolbar() {
 
       {/* Right Section - View Options */}
       <div className="flex items-center gap-2 md:ml-auto">
+        <ThemeToggle />
+        
         <Button
           variant={showWaveform ? "default" : "outline"}
           size="sm"

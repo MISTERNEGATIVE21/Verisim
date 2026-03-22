@@ -36,11 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
-  createFile as tauriCreateFile, 
-  deleteFile as tauriDeleteFile, 
-  renameFile as tauriRenameFile 
-} from '@/lib/tauri-db';
 
 export function FileExplorer() {
   const { 
@@ -157,7 +152,16 @@ endmodule`;
       }
 
       const content = getDefaultContent(name, newFileType);
-      const newFile = await tauriCreateFile(currentProject.id, name, newFileType, content);
+      const now = new Date().toISOString();
+      const newFile: VerilogFile = {
+        id: `${currentProject.id}:${name}`,
+        name,
+        content,
+        type: newFileType,
+        project_id: currentProject.id,
+        created_at: now,
+        updated_at: now
+      };
       
       const updatedProject = {
         ...currentProject,
@@ -180,7 +184,11 @@ endmodule`;
     
     try {
       const name = renameValue.trim();
-      const updatedFile = await tauriRenameFile(editingFile.id, name);
+      const updatedFile = {
+        ...editingFile,
+        name,
+        id: `${currentProject.id}:${name}`
+      };
       
       const updatedProject = {
         ...currentProject,
@@ -200,8 +208,6 @@ endmodule`;
     if (!confirm('Are you sure you want to delete this file?')) return;
     
     try {
-      await tauriDeleteFile(fileId);
-      
       closeFile(fileId);
       const updatedProject = {
         ...currentProject,

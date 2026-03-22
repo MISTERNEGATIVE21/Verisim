@@ -1,90 +1,90 @@
 import { invoke } from '@tauri-apps/api/core';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { useIDEStore } from '../store/ide-store';
 
-export async function fetchProjects() {
-  console.log('TauriDB: fetchProjects called');
+export function generateId() {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+export async function openProjectFile() {
+  console.log('TauriDB: openProjectFile called');
   try {
-    const projects = await invoke<any[]>('get_projects');
-    console.log('TauriDB: fetchProjects success', projects);
-    return projects;
+    const selectedPath = await open({
+      multiple: false,
+      filters: [{ name: 'Verisim Project', extensions: ['vsm'] }]
+    });
+
+    if (selectedPath && typeof selectedPath === 'string') {
+      const project = await invoke<any>('open_project', { path: selectedPath });
+      useIDEStore.getState().setCurrentProject(project, selectedPath);
+      return project;
+    }
+    return null;
   } catch (error) {
-    console.error('TauriDB: fetchProjects error:', error);
-    return [];
+    console.error('TauriDB: openProjectFile error:', error);
+    throw error;
   }
 }
 
-export async function createProject(name: string, description: string, template: string) {
-  console.log('TauriDB: createProject called', { name, description, template });
+export async function saveProjectFile(isSaveAs = false) {
+  console.log('TauriDB: saveProjectFile called', { isSaveAs });
   try {
-    const files = getTemplateFiles(template).map(f => ({
-        id: '', // Backend will generate
-        name: f.name,
-        content: f.content,
-        type: f.type,
-        project_id: '' // Backend will set
-    }));
+    const { currentProject, projectPath, setCurrentProject } = useIDEStore.getState();
+    if (!currentProject) return null;
+
+    let targetPath = projectPath;
+
+    if (!targetPath || isSaveAs) {
+      const selectedPath = await save({
+        filters: [{ name: 'Verisim Project', extensions: ['vsm'] }],
+        defaultPath: `${currentProject.name || 'Project'}.vsm`
+      });
+      if (!selectedPath) return null;
+      targetPath = selectedPath;
+    }
+
+    currentProject.updated_at = new Date().toISOString();
+
+    await invoke('save_project', { path: targetPath, project: currentProject });
     
-    console.log('TauriDB: invoking create_project with files', files);
-    const project = await invoke<any>('create_project', { name, description, files });
-    console.log('TauriDB: create_project success', project);
-    return project;
+    // Update path in store if it changed
+    if (projectPath !== targetPath) {
+      setCurrentProject(currentProject, targetPath);
+    }
+
+    return targetPath;
   } catch (error) {
-    console.error('TauriDB: createProject error:', error);
+    console.error('TauriDB: saveProjectFile error:', error);
     throw error;
   }
 }
 
-export async function updateFile(id: string, content: string) {
-  console.log('TauriDB: updateFile called', { id });
-  try {
-    await invoke('update_file', { id, content });
-    console.log('TauriDB: updateFile success');
-  } catch (error) {
-    console.error('TauriDB: updateFile error:', error);
-  }
-}
+export function createNewProject(name: string, description: string, template: string) {
+  console.log('TauriDB: createNewProject called', { name, description, template });
+  const projectId = generateId();
+  const now = new Date().toISOString();
+  
+  const files = getTemplateFiles(template).map(f => ({
+    id: `${projectId}:${f.name}`,
+    name: f.name,
+    content: f.content,
+    type: f.type,
+    project_id: projectId,
+    created_at: now,
+    updated_at: now
+  }));
 
-export async function deleteProject(id: string) {
-  console.log('TauriDB: deleteProject called', { id });
-  try {
-    await invoke('delete_project', { id });
-    console.log('TauriDB: deleteProject success');
-  } catch (error) {
-    console.error('TauriDB: deleteProject error:', error);
-  }
-}
+  const project = {
+    id: projectId,
+    name,
+    description: description || null,
+    files,
+    created_at: now,
+    updated_at: now
+  };
 
-export async function createFile(projectId: string, name: string, type: string, content: string) {
-  console.log('TauriDB: createFile called', { projectId, name, type });
-  try {
-    const file = await invoke<any>('create_file', { project_id: projectId, name, file_type: type, content });
-    console.log('TauriDB: createFile success', file);
-    return file;
-  } catch (error) {
-    console.error('TauriDB: createFile error:', error);
-    throw error;
-  }
-}
-
-export async function deleteFile(id: string) {
-  console.log('TauriDB: deleteFile called', { id });
-  try {
-    await invoke('delete_file', { id });
-    console.log('TauriDB: deleteFile success');
-  } catch (error) {
-    console.error('TauriDB: deleteFile error:', error);
-  }
-}
-
-export async function renameFile(id: string, name: string) {
-  console.log('TauriDB: renameFile called', { id, name });
-  try {
-    const file = await invoke<any>('rename_file', { id, name });
-    console.log('TauriDB: renameFile success', file);
-    return file;
-  } catch (error) {
-    console.error('TauriDB: renameFile error:', error);
-    throw error;
-  }
+  useIDEStore.getState().setCurrentProject(project, null);
+  return project;
 }
 
 export async function runSimulation(projectId: string, files: any[]) {
@@ -109,7 +109,7 @@ export async function runSimulation(projectId: string, files: any[]) {
   }
 }
 
-function getTemplateFiles(template: string) {
+export function getTemplateFiles(template: string) {
   const templates: Record<string, Array<{ name: string; content: string; type: string }>> = {
     none: [
         {
@@ -122,581 +122,86 @@ function getTemplateFiles(template: string) {
       {
         name: 'counter.v',
         type: 'verilog',
-        content: `// 4-bit Counter Example
-module counter(
-    input wire clk,
-    input wire rst,
-    input wire enable,
-    output reg [3:0] count
-);
-
-always @(posedge clk or posedge rst) begin
-    if (rst) begin
-        count <= 4'b0000;
-    end else if (enable) begin
-        count <= count + 1;
-    end
-end
-
-endmodule`,
+        content: `// 4-bit Counter Example\nmodule counter(\n    input wire clk,\n    input wire rst,\n    input wire enable,\n    output reg [3:0] count\n);\n\nalways @(posedge clk or posedge rst) begin\n    if (rst) begin\n        count <= 4'b0000;\n    end else if (enable) begin\n        count <= count + 1;\n    end\nend\n\nendmodule`,
       },
       {
         name: 'counter_tb.v',
         type: 'testbench',
-        content: `// Testbench for 4-bit Counter
-\`timescale 1ns/1ps
-
-module counter_tb;
-    reg clk;
-    reg rst;
-    reg enable;
-    wire [3:0] count;
-
-    // Instantiate the counter
-    counter uut (
-        .clk(clk),
-        .rst(rst),
-        .enable(enable),
-        .count(count)
-    );
-
-    // Generate clock
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    // Test sequence
-    initial begin
-        // Initialize
-        rst = 1;
-        enable = 0;
-        
-        // Apply reset
-        #10 rst = 0;
-        
-        // Enable counting
-        #10 enable = 1;
-        
-        // Let it count for a while
-        #100 enable = 1;
-        
-        // Test reset
-        #20 rst = 1;
-        #10 rst = 0;
-        #10 enable = 1;
-        
-        #50 $finish;
-    end
-
-    // Monitor changes
-    initial begin
-        $monitor("Time=%0t, rst=%b, enable=%b, count=%d", 
-                 $time, rst, enable, count);
-    end
-
-    // Generate VCD for waveform viewing
-    initial begin
-        $dumpfile("counter.vcd");
-        $dumpvars(0, counter_tb);
-    end
-
-endmodule`,
+        content: `// Testbench for 4-bit Counter\n\`timescale 1ns/1ps\n\nmodule counter_tb;\n    reg clk;\n    reg rst;\n    reg enable;\n    wire [3:0] count;\n\n    counter uut (\n        .clk(clk),\n        .rst(rst),\n        .enable(enable),\n        .count(count)\n    );\n\n    initial begin\n        clk = 0;\n        forever #5 clk = ~clk;\n    end\n\n    initial begin\n        rst = 1;\n        enable = 0;\n        #10 rst = 0;\n        #10 enable = 1;\n        #100 enable = 1;\n        #20 rst = 1;\n        #10 rst = 0;\n        #10 enable = 1;\n        #50 $finish;\n    end\n\n    initial begin\n        $monitor("Time=%0t, rst=%b, enable=%b, count=%d",\n                 $time, rst, enable, count);\n    end\n\n    initial begin\n        $dumpfile("counter.vcd");\n        $dumpvars(0, counter_tb);\n    end\nendmodule`,
       },
     ],
     mux: [
       {
         name: 'mux4to1.v',
         type: 'verilog',
-        content: `// 4-to-1 Multiplexer
-module mux4to1(
-    input wire [3:0] data_in,
-    input wire [1:0] select,
-    output reg data_out
-);
-
-always @(*) begin
-    case (select)
-        2'b00: data_out = data_in[0];
-        2'b01: data_out = data_in[1];
-        2'b10: data_out = data_in[2];
-        2'b11: data_out = data_in[3];
-        default: data_out = 1'bx;
-    endcase
-end
-
-endmodule`,
+        content: `// 4-to-1 Multiplexer\nmodule mux4to1(\n    input wire [3:0] data_in,\n    input wire [1:0] select,\n    output reg data_out\n);\n\nalways @(*) begin\n    case (select)\n        2'b00: data_out = data_in[0];\n        2'b01: data_out = data_in[1];\n        2'b10: data_out = data_in[2];\n        2'b11: data_out = data_in[3];\n        default: data_out = 1'bx;\n    endcase\nend\n\nendmodule`,
       },
       {
         name: 'mux4to1_tb.v',
         type: 'testbench',
-        content: `// Testbench for 4-to-1 MUX
-\`timescale 1ns/1ps
-
-module mux4to1_tb;
-    reg [3:0] data_in;
-    reg [1:0] select;
-    wire data_out;
-
-    mux4to1 uut (
-        .data_in(data_in),
-        .select(select),
-        .data_out(data_out)
-    );
-
-    initial begin
-        // Test all combinations
-        data_in = 4'b1010;
-        
-        select = 2'b00; #10;
-        select = 2'b01; #10;
-        select = 2'b10; #10;
-        select = 2'b11; #10;
-        
-        // Change data and test again
-        data_in = 4'b0101;
-        select = 2'b00; #10;
-        select = 2'b01; #10;
-        select = 2'b10; #10;
-        select = 2'b11; #10;
-        
-        $finish;
-    end
-
-    initial begin
-        $monitor("Time=%0t, data_in=%b, select=%b, data_out=%b",
-                 $time, data_in, select, data_out);
-    end
-
-    initial begin
-        $dumpfile("mux4to1.vcd");
-        $dumpvars(0, mux4to1_tb);
-    end
-
-endmodule`,
+        content: `// Testbench for 4-to-1 MUX\n\`timescale 1ns/1ps\n\nmodule mux4to1_tb;\n    reg [3:0] data_in;\n    reg [1:0] select;\n    wire data_out;\n\n    mux4to1 uut (\n        .data_in(data_in),\n        .select(select),\n        .data_out(data_out)\n    );\n\n    initial begin\n        data_in = 4'b1010;\n        select = 2'b00; #10;\n        select = 2'b01; #10;\n        select = 2'b10; #10;\n        select = 2'b11; #10;\n        data_in = 4'b0101;\n        select = 2'b00; #10;\n        select = 2'b01; #10;\n        select = 2'b10; #10;\n        select = 2'b11; #10;\n        $finish;\n    end\n\n    initial begin\n        $monitor("Time=%0t, data_in=%b, select=%b, data_out=%b",\n                 $time, data_in, select, data_out);\n    end\n\n    initial begin\n        $dumpfile("mux4to1.vcd");\n        $dumpvars(0, mux4to1_tb);\n    end\nendmodule`,
       },
     ],
     alu: [
       {
         name: 'alu.v',
         type: 'verilog',
-        content: `// Simple ALU
-module alu(
-    input wire [7:0] a,
-    input wire [7:0] b,
-    input wire [2:0] op,
-    output reg [7:0] result,
-    output reg zero,
-    output reg carry
-);
-
-always @(*) begin
-    carry = 0;
-    case (op)
-        3'b000: {carry, result} = a + b;
-        3'b001: {carry, result} = a - b;
-        3'b010: result = a & b;
-        3'b011: result = a | b;
-        3'b100: result = a ^ b;
-        3'b101: result = ~a;
-        3'b110: result = a << 1;
-        3'b111: result = a >> 1;
-        default: result = 8'b0;
-    endcase
-    zero = (result == 8'b0);
-end
-
-endmodule`,
+        content: `// Simple ALU\nmodule alu(\n    input wire [7:0] a,\n    input wire [7:0] b,\n    input wire [2:0] op,\n    output reg [7:0] result,\n    output reg zero,\n    output reg carry\n);\n\nalways @(*) begin\n    carry = 0;\n    case (op)\n        3'b000: {carry, result} = a + b;\n        3'b001: {carry, result} = a - b;\n        3'b010: result = a & b;\n        3'b011: result = a | b;\n        3'b100: result = a ^ b;\n        3'b101: result = ~a;\n        3'b110: result = a << 1;\n        3'b111: result = a >> 1;\n        default: result = 8'b0;\n    endcase\n    zero = (result == 8'b0);\nend\n\nendmodule`,
       },
       {
         name: 'alu_tb.v',
         type: 'testbench',
-        content: `// Testbench for ALU
-\`timescale 1ns/1ps
-
-module alu_tb;
-    reg [7:0] a, b;
-    reg [2:0] op;
-    wire [7:0] result;
-    wire zero, carry;
-
-    alu uut (
-        .a(a), .b(b), .op(op),
-        .result(result), .zero(zero), .carry(carry)
-    );
-
-    initial begin
-        // Test ADD
-        a = 8'h50; b = 8'h30; op = 3'b000; #10;
-        
-        // Test SUB
-        op = 3'b001; #10;
-        
-        // Test AND
-        a = 8'hFF; b = 8'h0F; op = 3'b010; #10;
-        
-        // Test OR
-        op = 3'b011; #10;
-        
-        // Test XOR
-        op = 3'b100; #10;
-        
-        // Test NOT
-        a = 8'h55; op = 3'b101; #10;
-        
-        // Test Shift
-        a = 8'h01; op = 3'b110; #10;
-        op = 3'b111; #10;
-        
-        $finish;
-    end
-
-    initial begin
-        $monitor("Time=%0t, a=%h, b=%h, op=%b, result=%h, zero=%b, carry=%b",
-                 $time, a, b, op, result, zero, carry);
-    end
-
-    initial begin
-        $dumpfile("alu.vcd");
-        $dumpvars(0, alu_tb);
-    end
-
-endmodule`,
+        content: `// Testbench for ALU\n\`timescale 1ns/1ps\n\nmodule alu_tb;\n    reg [7:0] a, b;\n    reg [2:0] op;\n    wire [7:0] result;\n    wire zero, carry;\n\n    alu uut (\n        .a(a), .b(b), .op(op),\n        .result(result), .zero(zero), .carry(carry)\n    );\n\n    initial begin\n        a = 8'h50; b = 8'h30; op = 3'b000; #10;\n        op = 3'b001; #10;\n        a = 8'hFF; b = 8'h0F; op = 3'b010; #10;\n        op = 3'b011; #10;\n        op = 3'b100; #10;\n        a = 8'h55; op = 3'b101; #10;\n        a = 8'h01; op = 3'b110; #10;\n        op = 3'b111; #10;\n        $finish;\n    end\n\n    initial begin\n        $monitor("Time=%0t, a=%h, b=%h, op=%b, result=%h, zero=%b, carry=%b",\n                 $time, a, b, op, result, zero, carry);\n    end\n\n    initial begin\n        $dumpfile("alu.vcd");\n        $dumpvars(0, alu_tb);\n    end\nendmodule`,
       },
     ],
     fsm: [
       {
         name: 'fsm.v',
         type: 'verilog',
-        content: `// Simple Moore FSM - Traffic Light Controller
-module traffic_light_fsm(
-    input wire clk,
-    input wire rst,
-    input wire emergency,
-    output reg [2:0] light // Green=001, Yellow=010, Red=100
-);
-
-parameter GREEN  = 2'b00;
-parameter YELLOW = 2'b01;
-parameter RED    = 2'b10;
-
-reg [1:0] state, next_state;
-reg [3:0] timer;
-
-always @(posedge clk or posedge rst) begin
-    if (rst) begin
-        state <= GREEN;
-        timer <= 0;
-    } else begin
-        state <= next_state;
-        if (timer < 15) timer <= timer + 1;
-        else timer <= 0;
-    end
-end
-
-always @(*) begin
-    if (emergency) begin
-        next_state = RED;
-    end else begin
-        case (state)
-            GREEN:  next_state = (timer == 10) ? YELLOW : GREEN;
-            YELLOW: next_state = (timer == 3) ? RED : YELLOW;
-            RED:    next_state = (timer == 15) ? GREEN : RED;
-            default: next_state = GREEN;
-        endcase
-    end
-end
-
-always @(*) begin
-    case (state)
-        GREEN:  light = 3'b001;
-        YELLOW: light = 3'b010;
-        RED:    light = 3'b100;
-        default: light = 3'b100;
-    endcase
-end
-
-endmodule`,
+        content: `// Traffic Light Controller FSM\nmodule traffic_light_fsm(\n    input wire clk,\n    input wire rst,\n    input wire emergency,\n    output reg [2:0] light\n);\n\nparameter GREEN = 2'b00, YELLOW = 2'b01, RED = 2'b10;\nreg [1:0] state, next_state;\nreg [3:0] timer;\n\nalways @(posedge clk or posedge rst) begin\n    if (rst) begin\n        state <= GREEN;\n        timer <= 0;\n    end else begin\n        state <= next_state;\n        if (timer < 15) timer <= timer + 1;\n        else timer <= 0;\n    end\nend\n\nalways @(*) begin\n    if (emergency) next_state = RED;\n    else case (state)\n        GREEN:  next_state = (timer == 10) ? YELLOW : GREEN;\n        YELLOW: next_state = (timer == 3) ? RED : YELLOW;\n        RED:    next_state = (timer == 15) ? GREEN : RED;\n        default: next_state = GREEN;\n    endcase\nend\n\nalways @(*) case (state)\n    GREEN:  light = 3'b001;\n    YELLOW: light = 3'b010;\n    RED:    light = 3'b100;\n    default: light = 3'b100;\nendcase\nendmodule`,
       },
       {
         name: 'fsm_tb.v',
         type: 'testbench',
-        content: `// Testbench for Traffic Light FSM
-\`timescale 1ns/1ps
-
-module traffic_light_fsm_tb;
-    reg clk, rst, emergency;
-    wire [2:0] light;
-
-    traffic_light_fsm uut (
-        .clk(clk),
-        .rst(rst),
-        .emergency(emergency),
-        .light(light)
-    );
-
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    initial begin
-        rst = 1;
-        emergency = 0;
-        #20 rst = 0;
-        #200;
-        emergency = 1;
-        #50 emergency = 0;
-        #200;
-        $finish;
-    end
-
-    initial begin
-        $monitor("Time=%0t, light=%b, emergency=%b",
-                 $time, light, emergency);
-    end
-
-    initial begin
-        $dumpfile("traffic_light.vcd");
-        $dumpvars(0, traffic_light_fsm_tb);
-    end
-
-endmodule`,
+        content: `// Testbench for FSM\n\`timescale 1ns/1ps\n\nmodule traffic_light_fsm_tb;\n    reg clk, rst, emergency;\n    wire [2:0] light;\n\n    traffic_light_fsm uut (.clk(clk), .rst(rst), .emergency(emergency), .light(light));\n\n    initial begin\n        clk = 0;\n        forever #5 clk = ~clk;\n    end\n\n    initial begin\n        rst = 1; emergency = 0; #20 rst = 0;\n        #200 emergency = 1; #50 emergency = 0;\n        #200 $finish;\n    end\n\n    initial begin\n        $monitor("Time=%0t, light=%b, emergency=%b", $time, light, emergency);\n    end\n\n    initial begin\n        $dumpfile("traffic_light.vcd");\n        $dumpvars(0, traffic_light_fsm_tb);\n    end\nendmodule`,
       },
     ],
     dff: [
       {
         name: 'dff.v',
         type: 'verilog',
-        content: `// D Flip-Flop with Synchronous Reset
-module dff(
-    input wire clk,
-    input wire rst,
-    input wire d,
-    output reg q
-);
-
-always @(posedge clk) begin
-    if (rst) begin
-        q <= 1'b0;
-    end else begin
-        q <= d;
-    end
-end
-
-endmodule`,
+        content: `// D Flip-Flop with Synchronous Reset\nmodule dff(\n    input wire clk,\n    input wire rst,\n    input wire d,\n    output reg q\n);\n\nalways @(posedge clk) begin\n    if (rst) q <= 1'b0;\n    else q <= d;\nend\nendmodule`,
       },
       {
         name: 'dff_tb.v',
         type: 'testbench',
-        content: `// Testbench for D Flip-Flop
-\`timescale 1ns/1ps
-
-module dff_tb;
-    reg clk;
-    reg rst;
-    reg d;
-    wire q;
-
-    dff uut (
-        .clk(clk),
-        .rst(rst),
-        .d(d),
-        .q(q)
-    );
-
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    initial begin
-        rst = 1; d = 0;
-        #20 rst = 0;
-        
-        #10 d = 1;
-        #10 d = 0;
-        #10 d = 1;
-        #10 rst = 1; // Test synchronous reset
-        #10 rst = 0;
-        #10 d = 0;
-        
-        #50 $finish;
-    end
-
-    initial begin
-        $monitor("Time=%0t, rst=%b, d=%b, q=%b", $time, rst, d, q);
-    end
-
-    initial begin
-        $dumpfile("dff.vcd");
-        $dumpvars(0, dff_tb);
-    end
-endmodule`,
+        content: `// Testbench for D Flip-Flop\n\`timescale 1ns/1ps\n\nmodule dff_tb;\n    reg clk, rst, d;\n    wire q;\n\n    dff uut (.clk(clk), .rst(rst), .d(d), .q(q));\n\n    initial begin\n        clk = 0;\n        forever #5 clk = ~clk;\n    end\n\n    initial begin\n        rst = 1; d = 0; #20 rst = 0;\n        #10 d = 1; #10 d = 0; #10 d = 1;\n        #10 rst = 1; #10 rst = 0; #10 d = 0;\n        #50 $finish;\n    end\n\n    initial begin\n        $monitor("Time=%0t, rst=%b, d=%b, q=%b", $time, rst, d, q);\n    end\n\n    initial begin\n        $dumpfile("dff.vcd");\n        $dumpvars(0, dff_tb);\n    end\nendmodule`,
       },
     ],
     shift_reg: [
       {
         name: 'shift_reg.v',
         type: 'verilog',
-        content: `// 4-bit Shift Register
-module shift_reg(
-    input wire clk,
-    input wire rst,
-    input wire load,
-    input wire [3:0] din,
-    input wire shift_in,
-    output reg [3:0] q
-);
-
-always @(posedge clk or posedge rst) begin
-    if (rst) begin
-        q <= 4'b0000;
-    end else if (load) begin
-        q <= din;
-    end else begin
-        q <= {q[2:0], shift_in};
-    end
-end
-
-endmodule`,
+        content: `// 4-bit Shift Register\nmodule shift_reg(\n    input wire clk,\n    input wire rst,\n    input wire load,\n    input wire [3:0] din,\n    input wire shift_in,\n    output reg [3:0] q\n);\n\nalways @(posedge clk or posedge rst) begin\n    if (rst) q <= 4'b0000;\n    else if (load) q <= din;\n    else q <= {q[2:0], shift_in};\nend\nendmodule`,
       },
       {
         name: 'shift_reg_tb.v',
         type: 'testbench',
-        content: `// Testbench for Shift Register
-\`timescale 1ns/1ps
-
-module shift_reg_tb;
-    reg clk;
-    reg rst;
-    reg load;
-    reg [3:0] din;
-    reg shift_in;
-    wire [3:0] q;
-
-    shift_reg uut (
-        .clk(clk),
-        .rst(rst),
-        .load(load),
-        .din(din),
-        .shift_in(shift_in),
-        .q(q)
-    );
-
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    initial begin
-        rst = 1; load = 0; din = 4'b0000; shift_in = 0;
-        #15 rst = 0;
-        
-        // Load data
-        #10 load = 1; din = 4'b1011;
-        #10 load = 0;
-        
-        // Shift in 1s and 0s
-        #10 shift_in = 1;
-        #10 shift_in = 0;
-        #10 shift_in = 1;
-        #10 shift_in = 1;
-        
-        #50 $finish;
-    end
-
-    initial begin
-        $dumpfile("shift_reg.vcd");
-        $dumpvars(0, shift_reg_tb);
-    end
-endmodule`,
+        content: `// Testbench for Shift Register\n\`timescale 1ns/1ps\n\nmodule shift_reg_tb;\n    reg clk, rst, load;\n    reg [3:0] din;\n    reg shift_in;\n    wire [3:0] q;\n\n    shift_reg uut (.clk(clk), .rst(rst), .load(load), .din(din), .shift_in(shift_in), .q(q));\n\n    initial begin\n        clk = 0;\n        forever #5 clk = ~clk;\n    end\n\n    initial begin\n        rst = 1; load = 0; din = 4'b0; shift_in = 0; #15 rst = 0;\n        #10 load = 1; din = 4'b1011;\n        #10 load = 0;\n        #10 shift_in = 1; #10 shift_in = 0; #10 shift_in = 1; #10 shift_in = 1;\n        #50 $finish;\n    end\n\n    initial begin\n        $dumpfile("shift_reg.vcd");\n        $dumpvars(0, shift_reg_tb);\n    end\nendmodule`,
       },
     ],
     memory: [
       {
         name: 'ram.v',
         type: 'verilog',
-        content: `// Simple 16x8 Single-Port RAM
-module ram(
-    input wire clk,
-    input wire we,          // Write enable
-    input wire [3:0] addr,  // 4-bit address (16 locations)
-    input wire [7:0] din,   // 8-bit data input
-    output reg [7:0] dout   // 8-bit data output
-);
-
-    reg [7:0] mem [0:15];   // 16 words of 8 bits
-
-    always @(posedge clk) begin
-        if (we) begin
-            mem[addr] <= din;
-        end
-        dout <= mem[addr]; // Read operations happen every clock
-    end
-
-endmodule`,
+        content: `// 16x8 Single-Port RAM\nmodule ram(\n    input wire clk,\n    input wire we,\n    input wire [3:0] addr,\n    input wire [7:0] din,\n    output reg [7:0] dout\n);\n\n    reg [7:0] mem [0:15];\n    always @(posedge clk) begin\n        if (we) mem[addr] <= din;\n        dout <= mem[addr];\n    end\nendmodule`,
       },
       {
         name: 'ram_tb.v',
         type: 'testbench',
-        content: `// Testbench for RAM
-\`timescale 1ns/1ps
-
-module ram_tb;
-    reg clk;
-    reg we;
-    reg [3:0] addr;
-    reg [7:0] din;
-    wire [7:0] dout;
-
-    ram uut (
-        .clk(clk),
-        .we(we),
-        .addr(addr),
-        .din(din),
-        .dout(dout)
-    );
-
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    initial begin
-        // Initialize
-        we = 0; addr = 0; din = 0;
-        #15;
-        
-        // Write data to address 5
-        we = 1; addr = 4'h5; din = 8'hA5;
-        #10;
-        
-        // Write data to address A
-        we = 1; addr = 4'hA; din = 8'h3C;
-        #10;
-        
-        // Read data back from 5
-        we = 0; addr = 4'h5;
-        #10;
-        
-        // Read data back from A
-        we = 0; addr = 4'hA;
-        #10;
-        
-        #50 $finish;
-    end
-
-    initial begin
-        $dumpfile("ram.vcd");
-        $dumpvars(0, ram_tb);
-        // Option to dump memory array (some simulators support this, but usually not natively in VCD without loops)
-        // For Icarus Verilog we could loop, but it's simpler to just dump the module.
-    end
-endmodule`,
+        content: `// Testbench for RAM\n\`timescale 1ns/1ps\n\nmodule ram_tb;\n    reg clk, we;\n    reg [3:0] addr;\n    reg [7:0] din;\n    wire [7:0] dout;\n\n    ram uut (.clk(clk), .we(we), .addr(addr), .din(din), .dout(dout));\n\n    initial begin\n        clk = 0;\n        forever #5 clk = ~clk;\n    end\n\n    initial begin\n        we = 0; addr = 0; din = 0; #15;\n        we = 1; addr = 4'h5; din = 8'hA5; #10;\n        we = 1; addr = 4'hA; din = 8'h3C; #10;\n        we = 0; addr = 4'h5; #10;\n        we = 0; addr = 4'hA; #10;\n        #50 $finish;\n    end\n\n    initial begin\n        $dumpfile("ram.vcd");\n        $dumpvars(0, ram_tb);\n    end\nendmodule`,
       },
     ],
   };
-
   return templates[template] || templates.basic;
 }

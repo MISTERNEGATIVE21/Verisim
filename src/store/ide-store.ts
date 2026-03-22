@@ -32,9 +32,13 @@ export interface SimulationResult {
 interface IDEState {
   // Projects
   projects: Project[];
-  currentProject: Project | null;
   setProjects: (projects: Project[]) => void;
-  setCurrentProject: (project: Project | null) => void;
+  
+  // Current active project
+  currentProject: Project | null;
+  projectPath: string | null;
+  setCurrentProject: (project: Project | null, path?: string | null) => void;
+  setProjectFiles: (files: VerilogFile[]) => void;
 
   // Files
   activeFile: VerilogFile | null;
@@ -55,14 +59,23 @@ interface IDEState {
   setShowWaveform: (show: boolean) => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  isNewProjectDialogOpen: boolean;
+  setIsNewProjectDialogOpen: (open: boolean) => void;
 }
 
 export const useIDEStore = create<IDEState>((set, get) => ({
   // Projects
   projects: [],
-  currentProject: null,
   setProjects: (projects) => set({ projects }),
-  setCurrentProject: (project) => set({ currentProject: project, openFiles: [], activeFile: null }),
+  
+  // Current active project
+  currentProject: null,
+  projectPath: null,
+  setCurrentProject: (project, path = null) => 
+    set({ currentProject: project, projectPath: path, openFiles: [], activeFile: null }),
+  setProjectFiles: (files) => set((state) => ({
+    currentProject: state.currentProject ? { ...state.currentProject, files, updated_at: new Date().toISOString() } : null
+  })),
 
   // Files
   activeFile: null,
@@ -119,4 +132,6 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   setShowWaveform: (show) => set({ showWaveform: show }),
   sidebarCollapsed: false,
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+  isNewProjectDialogOpen: false,
+  setIsNewProjectDialogOpen: (open) => set({ isNewProjectDialogOpen: open }),
 }));
