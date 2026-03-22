@@ -1,24 +1,18 @@
 {
-  "name": "verilogsim-ide",
-  "version": "2.0.0",
-  "description": "A modern, self-hosted Verilog IDE with live simulation and waveform viewing.",
+  "name": "verisim-ide",
+  "version": "1.0.0",
+  "description": "Verilog IDE with simulation and waveform viewing.",
   "author": "MISTERNEGATIVE21",
   "repository": {
     "type": "git",
     "url": "https://github.com/MISTERNEGATIVE21/Verisim.git"
   },
   "private": true,
-  "main": "electron-main.js",
   "scripts": {
-    "dev": "next dev -p 3077 2>&1 | tee dev.log",
+    "dev": "next dev -p 3077",
     "build": "next build",
     "start": "next start -p ${PORT:-3077}",
-    "lint": "eslint .",
-    "db:push": "bun x prisma db push",
-    "db:generate": "bun x prisma generate",
-    "db:migrate": "bun x prisma migrate dev",
-    "db:reset": "bun x prisma migrate reset",
-    "rebuild": "npm rebuild"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
