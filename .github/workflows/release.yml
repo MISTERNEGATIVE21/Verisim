@@ -55,9 +55,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NO_STRIP: ${{ matrix.platform == 'ubuntu-22.04' && 1 || 0 }}
         with:
-          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version
-          releaseName: "VerilogSim IDE v__VERSION__"
+          tagName: master
+          releaseName: "VerilogSim IDE master"
           releaseBody: "See the assets below to download the latest version of VerilogSim IDE."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

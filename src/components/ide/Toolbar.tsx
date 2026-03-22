@@ -59,6 +59,9 @@ const PROJECT_TEMPLATES = [
   { id: 'mux', name: 'Multiplexer', description: '4-to-1 MUX with testbench' },
   { id: 'alu', name: 'ALU', description: 'Simple ALU with multiple operations' },
   { id: 'fsm', name: 'FSM', description: 'Traffic light controller FSM' },
+  { id: 'dff', name: 'D Flip-Flop', description: 'D-Type Flip Flop with Synchronous Reset' },
+  { id: 'shift_reg', name: 'Shift Register', description: '4-bit Universal Shift Register' },
+  { id: 'memory', name: 'RAM Memory', description: 'Simple Single-Port RAM (16x8)' },
 ];
 
 const KEYBOARD_SHORTCUTS = [

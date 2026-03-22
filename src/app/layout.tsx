@@ -15,17 +15,12 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "VerilogSim IDE - HDL Development Environment",
-  description: "A professional, self-hosted Verilog simulation environment with real-time waveform viewing and integrated Icarus Verilog support.",
+  description: "A professional Verilog simulation environment with real-time waveform viewing and integrated Icarus Verilog support.",
   keywords: ["Verilog", "HDL", "Simulation", "Icarus Verilog", "Waveform", "Digital Logic", "IDE"],
   authors: [{ name: "MISTERNEGATIVE21" }],
   icons: {
     icon: "/logo.svg",
-  },
-  openGraph: {
-    title: "VerilogSim IDE",
-    description: "Modern Verilog IDE with real-time waveforms",
-    type: "website",
-  },
+  }
 };
 
 

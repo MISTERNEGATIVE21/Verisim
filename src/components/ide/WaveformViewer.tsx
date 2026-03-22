@@ -130,7 +130,42 @@ export function WaveformViewer() {
   const { simulationResult, showWaveform, setShowWaveform } = useIDEStore();
   const [zoom, setZoom] = useState(1);
   const [radix, setRadix] = useState<'bin' | 'dec' | 'hex'>('hex');
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const waveformAreaRef = useRef<HTMLDivElement>(null);
+
+  const formatSignalValue = (val: string, width: number, currentRadix: string) => {
+    if (width === 1) return val;
+    const cleanVal = val.startsWith('b') ? val.slice(1) : val;
+    if (cleanVal.includes('x')) return 'X';
+    if (cleanVal.includes('z')) return 'Z';
+
+    try {
+      const num = parseInt(cleanVal, 2);
+      if (isNaN(num)) return cleanVal;
+      switch (currentRadix) {
+        case 'dec': return num.toString(10);
+        case 'hex': return num.toString(16).toUpperCase();
+        case 'bin': return cleanVal;
+        default: return cleanVal;
+      }
+    } catch {
+      return cleanVal;
+    }
+  };
+
+  const getSignalValueAtTime = (signal: VCDSignal, time: number) => {
+    if (signal.values.length === 0) return '';
+    let latestVal = signal.values[0].value;
+    for (const v of signal.values) {
+      if (v.time <= time) {
+        latestVal = v.value;
+      } else {
+        break;
+      }
+    }
+    return formatSignalValue(latestVal, signal.width, radix);
+  };
 
   const vcdData = useMemo(() => {
     if (simulationResult?.vcdContent) {
@@ -224,24 +259,33 @@ export function WaveformViewer() {
       {/* Waveform Display */}
       <div className="flex-1 flex overflow-hidden" ref={containerRef}>
         {/* Signal Names */}
-        <div className="w-40 flex-shrink-0 border-r border-border bg-background">
-          <div className="h-8 border-b border-border bg-muted/50 px-3 flex items-center">
+        <div className="w-48 flex-shrink-0 border-r border-border bg-background flex flex-col z-20">
+          <div className="h-8 border-b border-border bg-muted/50 px-3 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Signal</span>
+            <span className="text-[10px] text-muted-foreground">{hoverTime !== null ? `${hoverTime}ns` : ''}</span>
           </div>
           <ScrollArea className="h-[calc(100%-2rem)]">
-            {vcdData.signals.map((signal, index) => (
-              <div
-                key={`${signal.symbol}-${index}`}
-                className="h-8 border-b border-border/50 px-3 flex items-center hover:bg-muted/50"
-              >
-                <span className="text-xs font-mono truncate" title={signal.name}>
-                  {signal.name}
-                </span>
-                <span className="ml-auto text-[9px] text-muted-foreground opacity-50">
-                  {signal.width > 1 ? `[${signal.width}]` : ''}
-                </span>
-              </div>
-            ))}
+            {vcdData.signals.map((signal, index) => {
+              const currentValue = hoverTime !== null ? getSignalValueAtTime(signal, hoverTime) : null;
+              return (
+                <div
+                  key={`${signal.symbol}-${index}`}
+                  className="h-8 border-b border-border/50 px-3 flex items-center hover:bg-muted/50"
+                >
+                  <span className="text-xs font-mono truncate" title={signal.name}>
+                    {signal.name}
+                  </span>
+                  <span className="ml-1 text-[9px] text-muted-foreground opacity-50">
+                    {signal.width > 1 ? `[${signal.width}]` : ''}
+                  </span>
+                  {currentValue !== null && (
+                    <span className="ml-auto text-xs font-mono font-medium text-blue-500">
+                      {currentValue}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </ScrollArea>
         </div>
 
@@ -263,7 +307,21 @@ export function WaveformViewer() {
           </div>
           
           {/* Signal Waveforms */}
-          <div style={{ minWidth: `${100 * zoom}%` }}>
+          <div 
+            style={{ minWidth: `${100 * zoom}%` }}
+            ref={waveformAreaRef}
+            className="relative cursor-crosshair pb-4"
+            onMouseMove={(e) => {
+              if (!vcdData || !waveformAreaRef.current) return;
+              const rect = waveformAreaRef.current.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const width = rect.width;
+              let t = Math.round((x / width) * vcdData.maxTime);
+              t = Math.max(0, Math.min(t, vcdData.maxTime));
+              setHoverTime(t);
+            }}
+            onMouseLeave={() => setHoverTime(null)}
+          >
             {vcdData.signals.map((signal, index) => (
               <div
                 key={`${signal.symbol}-${index}`}
@@ -272,6 +330,18 @@ export function WaveformViewer() {
                 <WaveformSignal signal={signal} maxTime={vcdData.maxTime} zoom={zoom} radix={radix} />
               </div>
             ))}
+
+            {/* Tracking Cursor Line */}
+            {hoverTime !== null && (
+              <div 
+                className="absolute top-0 bottom-0 border-l border-red-500 z-30 pointer-events-none"
+                style={{ left: `${(hoverTime / vcdData.maxTime) * 100}%` }}
+              >
+                <div className="absolute top-0 -translate-x-1/2 -mt-4 bg-red-500 text-white text-[9px] px-1 rounded shadow pointer-events-none whitespace-nowrap">
+                  {hoverTime} {vcdData.timescale}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -291,17 +361,13 @@ function WaveformSignal({ signal, maxTime, zoom, radix = 'hex' }: WaveformSignal
   
   const formatValue = (val: string) => {
     if (signal.width === 1) return val;
-    // Remove leading 'b' if present
     const cleanVal = val.startsWith('b') ? val.slice(1) : val;
-    
-    // Check for x or z
     if (cleanVal.includes('x')) return 'X';
     if (cleanVal.includes('z')) return 'Z';
 
     try {
       const num = parseInt(cleanVal, 2);
       if (isNaN(num)) return cleanVal;
-      
       switch (radix) {
         case 'dec': return num.toString(10);
         case 'hex': return num.toString(16).toUpperCase();

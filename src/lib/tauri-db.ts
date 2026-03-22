@@ -464,6 +464,238 @@ module traffic_light_fsm_tb;
 endmodule`,
       },
     ],
+    dff: [
+      {
+        name: 'dff.v',
+        type: 'verilog',
+        content: `// D Flip-Flop with Synchronous Reset
+module dff(
+    input wire clk,
+    input wire rst,
+    input wire d,
+    output reg q
+);
+
+always @(posedge clk) begin
+    if (rst) begin
+        q <= 1'b0;
+    end else begin
+        q <= d;
+    end
+end
+
+endmodule`,
+      },
+      {
+        name: 'dff_tb.v',
+        type: 'testbench',
+        content: `// Testbench for D Flip-Flop
+\`timescale 1ns/1ps
+
+module dff_tb;
+    reg clk;
+    reg rst;
+    reg d;
+    wire q;
+
+    dff uut (
+        .clk(clk),
+        .rst(rst),
+        .d(d),
+        .q(q)
+    );
+
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        rst = 1; d = 0;
+        #20 rst = 0;
+        
+        #10 d = 1;
+        #10 d = 0;
+        #10 d = 1;
+        #10 rst = 1; // Test synchronous reset
+        #10 rst = 0;
+        #10 d = 0;
+        
+        #50 $finish;
+    end
+
+    initial begin
+        $monitor("Time=%0t, rst=%b, d=%b, q=%b", $time, rst, d, q);
+    end
+
+    initial begin
+        $dumpfile("dff.vcd");
+        $dumpvars(0, dff_tb);
+    end
+endmodule`,
+      },
+    ],
+    shift_reg: [
+      {
+        name: 'shift_reg.v',
+        type: 'verilog',
+        content: `// 4-bit Shift Register
+module shift_reg(
+    input wire clk,
+    input wire rst,
+    input wire load,
+    input wire [3:0] din,
+    input wire shift_in,
+    output reg [3:0] q
+);
+
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        q <= 4'b0000;
+    end else if (load) begin
+        q <= din;
+    end else begin
+        q <= {q[2:0], shift_in};
+    end
+end
+
+endmodule`,
+      },
+      {
+        name: 'shift_reg_tb.v',
+        type: 'testbench',
+        content: `// Testbench for Shift Register
+\`timescale 1ns/1ps
+
+module shift_reg_tb;
+    reg clk;
+    reg rst;
+    reg load;
+    reg [3:0] din;
+    reg shift_in;
+    wire [3:0] q;
+
+    shift_reg uut (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .din(din),
+        .shift_in(shift_in),
+        .q(q)
+    );
+
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        rst = 1; load = 0; din = 4'b0000; shift_in = 0;
+        #15 rst = 0;
+        
+        // Load data
+        #10 load = 1; din = 4'b1011;
+        #10 load = 0;
+        
+        // Shift in 1s and 0s
+        #10 shift_in = 1;
+        #10 shift_in = 0;
+        #10 shift_in = 1;
+        #10 shift_in = 1;
+        
+        #50 $finish;
+    end
+
+    initial begin
+        $dumpfile("shift_reg.vcd");
+        $dumpvars(0, shift_reg_tb);
+    end
+endmodule`,
+      },
+    ],
+    memory: [
+      {
+        name: 'ram.v',
+        type: 'verilog',
+        content: `// Simple 16x8 Single-Port RAM
+module ram(
+    input wire clk,
+    input wire we,          // Write enable
+    input wire [3:0] addr,  // 4-bit address (16 locations)
+    input wire [7:0] din,   // 8-bit data input
+    output reg [7:0] dout   // 8-bit data output
+);
+
+    reg [7:0] mem [0:15];   // 16 words of 8 bits
+
+    always @(posedge clk) begin
+        if (we) begin
+            mem[addr] <= din;
+        end
+        dout <= mem[addr]; // Read operations happen every clock
+    end
+
+endmodule`,
+      },
+      {
+        name: 'ram_tb.v',
+        type: 'testbench',
+        content: `// Testbench for RAM
+\`timescale 1ns/1ps
+
+module ram_tb;
+    reg clk;
+    reg we;
+    reg [3:0] addr;
+    reg [7:0] din;
+    wire [7:0] dout;
+
+    ram uut (
+        .clk(clk),
+        .we(we),
+        .addr(addr),
+        .din(din),
+        .dout(dout)
+    );
+
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        // Initialize
+        we = 0; addr = 0; din = 0;
+        #15;
+        
+        // Write data to address 5
+        we = 1; addr = 4'h5; din = 8'hA5;
+        #10;
+        
+        // Write data to address A
+        we = 1; addr = 4'hA; din = 8'h3C;
+        #10;
+        
+        // Read data back from 5
+        we = 0; addr = 4'h5;
+        #10;
+        
+        // Read data back from A
+        we = 0; addr = 4'hA;
+        #10;
+        
+        #50 $finish;
+    end
+
+    initial begin
+        $dumpfile("ram.vcd");
+        $dumpvars(0, ram_tb);
+        // Option to dump memory array (some simulators support this, but usually not natively in VCD without loops)
+        // For Icarus Verilog we could loop, but it's simpler to just dump the module.
+    end
+endmodule`,
+      },
+    ],
   };
 
   return templates[template] || templates.basic;

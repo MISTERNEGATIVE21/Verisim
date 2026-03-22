@@ -79,7 +79,49 @@ export function FileExplorer() {
       const name = newFileName.endsWith('.v') ? newFileName : `${newFileName}.v`;
       const moduleName = name.replace('.v', '');
       const content = isTb 
-        ? `\`timescale 1ns/1ps\n\nmodule ${moduleName}();\n\n    initial begin\n        $dumpfile("${moduleName}.vcd");\n        $dumpvars(0, ${moduleName});\n        #100 $finish;\n    end\n\nendmodule` 
+        ? `\`timescale 1ns/1ps
+
+module ${moduleName}();
+
+    // Inputs
+    reg clk;
+    reg rst;
+
+    // Outputs
+    // wire ...
+
+    // Instantiate the Unit Under Test (UUT)
+    // uut_name uut (
+    //     .clk(clk),
+    //     .rst(rst)
+    // );
+
+    // Clock generation
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        // Initialize Inputs
+        rst = 1;
+        
+        // Wait 100 ns for global reset to finish
+        #100;
+        rst = 0;
+        
+        // Add stimulus here
+        
+        #1000 $finish;
+    end
+
+    // Generate VCD for waveform viewing
+    initial begin
+        $dumpfile("${moduleName}.vcd");
+        $dumpvars(0, ${moduleName});
+    end
+
+endmodule` 
         : `// Design file: ${name}\nmodule ${moduleName}(\n\n);\n\nendmodule`;
       
       const newFile = await tauriCreateFile(currentProject.id, name, newFileType, content);
@@ -163,7 +205,7 @@ export function FileExplorer() {
             variant="ghost" 
             size="icon" 
             className="h-6 w-6 text-amber-500" 
-            onClick={() => { setNewFileType('testbench'); setNewFileOpen(true); }}
+            onClick={() => { setNewFileType('testbench'); setNewFileName(''); setNewFileOpen(true); }}
             title="New Testbench"
           >
             <FilePlus className="h-4 w-4" />
