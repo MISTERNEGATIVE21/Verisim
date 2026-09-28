@@ -4,9 +4,19 @@ import { Cpu, FileCode, Plus, FolderOpen, ExternalLink, Github, Heart, BookOpen,
 import { useIDEStore } from '@/store/ide-store';
 import { openProjectFile, createNewProject } from '@/lib/tauri-db';
 import { toast } from 'sonner';
+import { open as openUrl } from '@tauri-apps/plugin-shell';
 
 export function WelcomeScreen() {
   const { setIsNewProjectDialogOpen } = useIDEStore();
+
+  const handleOpenUrl = (url: string) => async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      await openUrl(url);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
 
   const launchDemo = (name: string, desc: string, template: string) => {
     try {
@@ -118,8 +128,7 @@ export function WelcomeScreen() {
           <div className="grid grid-cols-2 gap-2">
             <a
               href="https://www.chipverify.com/verilog/verilog-tutorial"
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={handleOpenUrl("https://www.chipverify.com/verilog/verilog-tutorial")}
               className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
@@ -127,8 +136,7 @@ export function WelcomeScreen() {
             </a>
             <a
               href="https://verilator.org/guide/latest/"
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={handleOpenUrl("https://verilator.org/guide/latest/")}
               className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
@@ -136,8 +144,7 @@ export function WelcomeScreen() {
             </a>
             <a
               href="https://docs.cocotb.org/en/stable/"
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={handleOpenUrl("https://docs.cocotb.org/en/stable/")}
               className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-amber-400 shrink-0" />
@@ -145,8 +152,7 @@ export function WelcomeScreen() {
             </a>
             <a
               href="https://steveicarus.github.io/iverilog/"
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={handleOpenUrl("https://steveicarus.github.io/iverilog/")}
               className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
@@ -159,8 +165,7 @@ export function WelcomeScreen() {
         <div className="pt-4 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
           <a
             href="https://github.com/MISTERNEGATIVE21/Verisim"
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={handleOpenUrl("https://github.com/MISTERNEGATIVE21/Verisim")}
             className="flex items-center gap-1.5 hover:text-foreground transition-colors"
           >
             <Github className="h-4 w-4" />
@@ -169,11 +174,11 @@ export function WelcomeScreen() {
           
           <div className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
-            <span>v2.0.0 (All-in-One)</span>
+            <span>v6.0.1 (All-in-One)</span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span>By <a href="https://github.com/MISTERNEGATIVE21" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors font-medium">MISTERNEGATIVE21</a></span>
+            <span>By <a href="https://github.com/MISTERNEGATIVE21" onClick={handleOpenUrl("https://github.com/MISTERNEGATIVE21")} className="hover:text-foreground transition-colors font-medium">MISTERNEGATIVE21</a></span>
           </div>
         </div>
       </div>

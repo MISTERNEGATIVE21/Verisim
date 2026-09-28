@@ -1,17 +1,29 @@
 'use client';
 
 import { useIDEStore } from '@/store/ide-store';
+import * as monaco from 'monaco-editor';
 import Editor, { OnMount, BeforeMount, loader } from '@monaco-editor/react';
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Circle, Sparkles, FileCode, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { editor, languages } from 'monaco-editor';
 
-// Configure Monaco to load from local bundled assets (100% offline, zero CDN)
+// Configure Monaco to load from bundled package (100% offline, zero CDN, zero AMD script injection)
 if (typeof window !== 'undefined') {
-  loader.config({ paths: { vs: '/vs' } });
+  (window as any).MonacoEnvironment = {
+    getWorker: function() {
+      return new Worker(
+        URL.createObjectURL(
+          new Blob([
+            'self.onmessage = function() { self.postMessage({ id: 0, result: null }); };'
+          ], { type: 'application/javascript' })
+        )
+      );
+    }
+  };
+  loader.config({ monaco });
 }
 
 // SystemVerilog and Verilog language configuration
@@ -481,43 +493,89 @@ export function CodeEditor() {
       
       {/* Editor Area */}
       <div className="flex-1 relative overflow-hidden">
-        <Editor
-          height="100%"
-          language={activeLanguage}
-          value={activeFile.content}
-          theme={resolvedTheme === "light" ? "verisim-light" : "verisim-dark"}
-          loading={
-            <div className="h-full flex items-center justify-center bg-background text-muted-foreground text-xs gap-2">
-              <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-              <span>Loading Monaco Editor...</span>
-            </div>
-          }
-          beforeMount={handleEditorWillMount}
-          onMount={handleEditorDidMount}
-          onChange={handleEditorChange}
-          options={{
-            minimap: { enabled: true },
-            fontSize: 13,
-            lineNumbers: 'on',
-            wordWrap: 'on',
-            automaticLayout: true,
-            tabSize: 2,
-            scrollBeyondLastLine: false,
-            renderWhitespace: 'selection',
-            folding: true,
-            foldingHighlight: true,
-            bracketPairColorization: { enabled: true },
-            suggestOnTriggerCharacters: autoSuggestEnabled,
-            quickSuggestions: autoSuggestEnabled ? {
-              other: true,
-              comments: false,
-              strings: true
-            } : false,
-            cursorBlinking: 'smooth',
-            smoothScrolling: true,
-          }}
-        />
+        <EditorErrorBoundary fallbackValue={activeFile.content} onChange={handleEditorChange}>
+          <Editor
+            height="100%"
+            language={activeLanguage}
+            value={activeFile.content}
+            theme={resolvedTheme === "light" ? "verisim-light" : "verisim-dark"}
+            loading={
+              <div className="h-full flex items-center justify-center bg-background text-muted-foreground text-xs gap-2">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+                <span>Loading Monaco Editor...</span>
+              </div>
+            }
+            beforeMount={handleEditorWillMount}
+            onMount={handleEditorDidMount}
+            onChange={handleEditorChange}
+            options={{
+              minimap: { enabled: true },
+              fontSize: 13,
+              lineNumbers: 'on',
+              wordWrap: 'on',
+              automaticLayout: true,
+              tabSize: 2,
+              scrollBeyondLastLine: false,
+              renderWhitespace: 'selection',
+              folding: true,
+              foldingHighlight: true,
+              bracketPairColorization: { enabled: true },
+              suggestOnTriggerCharacters: autoSuggestEnabled,
+              quickSuggestions: autoSuggestEnabled ? {
+                other: true,
+                comments: false,
+                strings: true
+              } : false,
+              cursorBlinking: 'smooth',
+              smoothScrolling: true,
+            }}
+          />
+        </EditorErrorBoundary>
       </div>
     </div>
   );
+}
+
+class EditorErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallbackValue: string; onChange: (v: string) => void },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error: error?.message || 'Editor error' };
+  }
+
+  componentDidCatch(error: any, info: any) {
+    console.error('EditorErrorBoundary:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-full flex flex-col p-2 bg-background">
+          <div className="p-2 mb-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400 flex items-center justify-between">
+            <span>Editor fallback mode active</span>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-6 text-[10px]"
+              onClick={() => this.setState({ hasError: false, error: '' })}
+            >
+              Retry
+            </Button>
+          </div>
+          <textarea
+            className="flex-1 w-full p-3 font-mono text-xs bg-background text-foreground border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+            value={this.props.fallbackValue}
+            onChange={(e) => this.props.onChange(e.target.value)}
+          />
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }

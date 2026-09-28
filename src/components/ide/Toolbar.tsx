@@ -355,10 +355,10 @@ export function Toolbar() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" size="sm" onClick={() => setIsNewProjectDialogOpen(false)}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setIsNewProjectDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={createProject}>
+              <Button type="button" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={createProject}>
                 Create Project
               </Button>
             </DialogFooter>
