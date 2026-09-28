@@ -16,8 +16,14 @@ import {
   ZoomOut, 
   RotateCcw,
   Maximize,
-  Minimize
+  Minimize,
+  Columns2,
+  Rows3,
+  Maximize2,
+  Copy
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { useState, useMemo, useEffect, useRef } from 'react';
 
 interface VCDSignal {
@@ -129,7 +135,7 @@ function parseVCD(content: string): VCDData | null {
 }
 
 export function WaveformViewer() {
-  const { simulationResult, showWaveform, setShowWaveform } = useIDEStore();
+  const { simulationResult, showWaveform, setShowWaveform, waveformLayout, toggleWaveformLayout } = useIDEStore();
   const [zoom, setZoom] = useState(1);
   const [radix, setRadix] = useState<'bin' | 'dec' | 'hex'>('hex');
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -187,18 +193,29 @@ export function WaveformViewer() {
 
   if (!vcdData || vcdData.signals.length === 0) {
     return (
-      <div className="h-full flex flex-col bg-muted/30 border-t border-border">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/50">
+      <div className="h-full flex flex-col bg-card border-t border-border">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-card">
           <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Waveform Viewer</span>
+            <Activity className="h-4 w-4 text-cyan-500" />
+            <span className="text-xs font-semibold text-foreground">Waveform Viewer</span>
+            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Standby</span>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={toggleWaveformLayout}
+            title="Toggle Side-by-Side / Dock Layout"
+          >
+            {waveformLayout === 'side-by-side' ? <Rows3 className="h-3.5 w-3.5 mr-1" /> : <Columns2 className="h-3.5 w-3.5 mr-1" />}
+            <span>{waveformLayout === 'side-by-side' ? 'Dock' : 'Side-by-Side'}</span>
+          </Button>
         </div>
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
-          <div className="text-center p-8">
-            <Activity className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">No waveform data available</p>
-            <p className="text-xs mt-1 text-muted-foreground/60">Run a simulation with $dumpfile to generate waveforms</p>
+          <div className="text-center p-8 max-w-sm">
+            <Activity className="h-10 w-10 mx-auto mb-2 text-muted-foreground/40" />
+            <p className="text-xs font-semibold text-foreground">No Waveform Data Loaded</p>
+            <p className="text-[11px] mt-1 text-muted-foreground">Run an HDL simulation with <code className="font-mono text-primary">$dumpfile</code> to display real-time signal waveforms.</p>
           </div>
         </div>
       </div>
@@ -206,96 +223,57 @@ export function WaveformViewer() {
   }
 
   return (
-    <div className={`flex flex-col bg-background/95 backdrop-blur border-t border-border transition-all ${isMaximized ? 'fixed inset-0 z-50' : 'h-full bg-muted/30'}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/50">
+    <div className={`flex flex-col bg-background border-t border-border transition-all ${isMaximized ? 'fixed inset-0 z-50' : 'h-full'}`}>
+      {/* Top Header */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-card select-none">
         <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-purple-500" />
-          <span className="text-sm font-medium">Waveform Viewer</span>
-          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+          <Activity className="h-4 w-4 text-cyan-500" />
+          <span className="text-xs font-semibold text-foreground">Waveform Viewer</span>
+          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
             {vcdData.signals.length} signals
           </span>
+          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+            {vcdData.timescale}
+          </span>
+          {hoverTime !== null && (
+            <span className="text-[10px] font-mono text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
+              Marker: {hoverTime} {vcdData.timescale}
+            </span>
+          )}
           {isMaximized && (
-            <span className="text-[10px] text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+            <span className="text-[10px] text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 font-medium">
               Maximized
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <Select value={radix} onValueChange={(v: any) => setRadix(v)}>
-            <SelectTrigger className="h-7 w-[80px] text-[10px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="bin" className="text-[10px]">BIN</SelectItem>
-              <SelectItem value="dec" className="text-[10px]">DEC</SelectItem>
-              <SelectItem value="hex" className="text-[10px]">HEX</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setZoom(Math.max(0.5, zoom - 0.5))}
-            className="h-7 w-7 p-0"
-            title="Zoom Out"
-          >
-            <ZoomOut className="h-3 w-3" />
-          </Button>
-          <span className="text-xs px-2 min-w-[40px] text-center">{zoom.toFixed(1)}x</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setZoom(Math.min(10, zoom + 0.5))}
-            className="h-7 w-7 p-0"
-            title="Zoom In"
-          >
-            <ZoomIn className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setZoom(1)}
-            className="h-7 w-7 p-0"
-            title="Reset Zoom"
-          >
-            <RotateCcw className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsMaximized(!isMaximized)}
-            className="h-7 w-7 p-0 ml-1 text-blue-500 hover:text-blue-600"
-            title={isMaximized ? "Restore Window" : "Maximize Window"}
-          >
-            {isMaximized ? <Minimize className="h-3 w-3" /> : <Maximize className="h-3 w-3" />}
-          </Button>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-mono text-muted-foreground">Zoom: {zoom.toFixed(1)}x</span>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden w-full h-full" ref={containerRef}>
-        {/* Signal Names */}
-        <div className="w-48 flex-shrink-0 border-r border-border bg-background flex flex-col z-20">
-          <div className="h-8 border-b border-border bg-muted/50 px-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Signal</span>
-            <span className="text-[10px] text-muted-foreground">{hoverTime !== null ? `${hoverTime}ns` : ''}</span>
+      <div className="flex-1 flex overflow-hidden w-full h-full relative" ref={containerRef}>
+        {/* Signal Names Left Column */}
+        <div className="w-48 flex-shrink-0 border-r border-border bg-card flex flex-col z-10">
+          <div className="h-7 border-b border-border bg-muted/40 px-2.5 flex items-center justify-between text-[11px]">
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Signal</span>
+            <span className="font-mono text-[10px] text-blue-500">{hoverTime !== null ? `${hoverTime}${vcdData.timescale}` : ''}</span>
           </div>
-          <ScrollArea className="h-[calc(100%-2rem)]">
+          <ScrollArea className="h-[calc(100%-1.75rem)]">
             {vcdData.signals.map((signal, index) => {
               const currentValue = hoverTime !== null ? getSignalValueAtTime(signal, hoverTime) : null;
               return (
                 <div
                   key={`${signal.symbol}-${index}`}
-                  className="h-8 border-b border-border/50 px-3 flex items-center hover:bg-muted/50"
+                  className="h-8 border-b border-border/40 px-2.5 flex items-center hover:bg-muted/40 transition-colors"
                 >
-                  <span className="text-xs font-mono truncate" title={signal.name}>
+                  <span className="text-xs font-mono truncate text-foreground" title={signal.name}>
                     {signal.name}
                   </span>
-                  <span className="ml-1 text-[9px] text-muted-foreground opacity-50">
+                  <span className="ml-1 text-[9px] text-muted-foreground opacity-60">
                     {signal.width > 1 ? `[${signal.width}]` : ''}
                   </span>
                   {currentValue !== null && (
-                    <span className="ml-auto text-xs font-mono font-medium text-blue-500">
+                    <span className="ml-auto text-xs font-mono font-semibold text-blue-500">
                       {currentValue}
                     </span>
                   )}
@@ -305,15 +283,15 @@ export function WaveformViewer() {
           </ScrollArea>
         </div>
 
-        {/* Waveforms */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto w-full">
+        {/* Center: Waveform Canvas and Time Ruler */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto w-full bg-background relative">
           {/* Time Ruler */}
-          <div className="h-8 border-b border-border bg-muted/50 flex items-end sticky top-0 z-10 w-full min-w-max">
-            <div className="flex text-xs text-muted-foreground" style={{ width: `${Math.max(100, 100 * zoom)}%` }}>
+          <div className="h-7 border-b border-border bg-muted/30 flex items-end sticky top-0 z-10 w-full min-w-max">
+            <div className="flex text-[10px] font-mono text-muted-foreground" style={{ width: `${Math.max(100, 100 * zoom)}%` }}>
               {Array.from({ length: Math.max(5, Math.ceil(10 * zoom)) }, (_, i) => (
                 <div
                   key={i}
-                  className="flex-shrink-0 border-l border-border pl-1"
+                  className="flex-shrink-0 border-l border-border/80 pl-1"
                   style={{ width: `${100 / zoom}%` }}
                 >
                   {Math.round((i * vcdData.maxTime) / (10 * zoom))}
@@ -341,7 +319,7 @@ export function WaveformViewer() {
             {vcdData.signals.map((signal, index) => (
               <div
                 key={`${signal.symbol}-${index}`}
-                className="h-8 border-b border-border/50 relative w-full"
+                className="h-8 border-b border-border/40 relative w-full"
               >
                 <WaveformSignal signal={signal} maxTime={vcdData.maxTime} zoom={zoom} radix={radix} />
               </div>
@@ -350,15 +328,120 @@ export function WaveformViewer() {
             {/* Tracking Cursor Line */}
             {hoverTime !== null && (
               <div 
-                className="absolute top-0 bottom-0 border-l border-red-500 z-30 pointer-events-none"
+                className="absolute top-0 bottom-0 border-l-2 border-rose-500 z-30 pointer-events-none"
                 style={{ left: `${(hoverTime / vcdData.maxTime) * 100}%` }}
               >
-                <div className="absolute top-0 -translate-x-1/2 -mt-4 bg-red-500 text-white text-[9px] px-1 rounded shadow pointer-events-none whitespace-nowrap">
+                <div className="absolute top-0 -translate-x-1/2 -mt-4 bg-rose-600 text-white text-[9px] font-mono px-1 rounded shadow pointer-events-none whitespace-nowrap">
                   {hoverTime} {vcdData.timescale}
                 </div>
               </div>
             )}
           </div>
+        </div>
+
+        {/* Right-Hand Side Waveform Toolbar Menu */}
+        <div className="w-10 flex-shrink-0 border-l border-border bg-card flex flex-col items-center py-2 gap-1 z-20 select-none">
+          {/* Side-by-Side Split View Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-7 w-7 text-muted-foreground hover:text-foreground",
+              waveformLayout === 'side-by-side' && "text-blue-500 bg-blue-500/10"
+            )}
+            onClick={toggleWaveformLayout}
+            title={waveformLayout === 'side-by-side' ? "Dock Waveform to Bottom" : "Split Waveform Side-by-Side"}
+          >
+            {waveformLayout === 'side-by-side' ? <Rows3 className="h-4 w-4" /> : <Columns2 className="h-4 w-4" />}
+          </Button>
+
+          <div className="w-5 h-[1px] bg-border my-0.5" />
+
+          {/* Radix Toggle Button */}
+          <button
+            onClick={() => {
+              const order: ('hex' | 'dec' | 'bin')[] = ['hex', 'dec', 'bin'];
+              const next = order[(order.indexOf(radix) + 1) % order.length];
+              setRadix(next);
+            }}
+            className="w-7 h-7 rounded border border-border/70 flex items-center justify-center text-[9px] font-mono font-bold uppercase hover:bg-muted text-foreground transition-colors"
+            title={`Radix: ${radix.toUpperCase()} (Click to toggle HEX/DEC/BIN)`}
+          >
+            {radix.toUpperCase()}
+          </button>
+
+          {/* Zoom In */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setZoom(Math.min(10, zoom + 0.5))}
+            title="Zoom In"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+
+          {/* Zoom Out */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setZoom(Math.max(0.5, zoom - 0.5))}
+            title="Zoom Out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+
+          {/* Reset Zoom */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setZoom(1)}
+            title="Reset Zoom (100%)"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+
+          {/* Zoom to Fit */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setZoom(0.8)}
+            title="Fit to Screen"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </Button>
+
+          <div className="w-5 h-[1px] bg-border my-0.5" />
+
+          {/* Maximize / Restore */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsMaximized(!isMaximized)}
+            title={isMaximized ? "Restore Window" : "Maximize Waveform Viewer"}
+          >
+            {isMaximized ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </Button>
+
+          {/* Copy Raw VCD */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground mt-auto"
+            onClick={() => {
+              if (simulationResult?.vcdContent) {
+                navigator.clipboard.writeText(simulationResult.vcdContent);
+                toast.success('Raw VCD waveform copied');
+              }
+            }}
+            title="Copy Raw VCD Dump"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
     </div>
@@ -502,7 +585,7 @@ function WaveformSignal({ signal, maxTime, zoom, radix = 'hex' }: WaveformSignal
             stroke="currentColor"
             strokeWidth="0.5"
             vectorEffect="non-scaling-stroke"
-            className="text-border/30"
+            className="stroke-border/40"
           />
         ))}
         
@@ -514,7 +597,7 @@ function WaveformSignal({ signal, maxTime, zoom, radix = 'hex' }: WaveformSignal
             stroke="currentColor"
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
-            className="text-green-500"
+            className="stroke-emerald-600 dark:stroke-emerald-400"
           />
         ) : (
           /* Multi-bit bus visualization */
@@ -543,7 +626,7 @@ function WaveformSignal({ signal, maxTime, zoom, radix = 'hex' }: WaveformSignal
                 stroke="currentColor"
                 strokeWidth="1"
                 vectorEffect="non-scaling-stroke"
-                className="text-blue-500/20 stroke-blue-500"
+                className="fill-blue-500/15 stroke-blue-600 dark:stroke-blue-400"
               />
             );
           })

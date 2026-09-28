@@ -10,10 +10,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3077",
-    "build": "next build",
+    "build": "mkdir -p public/vs && cp -rn node_modules/monaco-editor/min/vs/* public/vs/ 2>/dev/null || true && next build",
     "start": "next start -p ${PORT:-3077}",
     "lint": "eslint .",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "desktop": "./src-tauri/target/release/app",
+    "desktop:dev": "tauri dev",
+    "build:appimage": "NO_STRIP=true tauri build --bundles appimage",
+    "appimage": "./src-tauri/target/release/bundle/appimage/verisim-ide_1.0.0_amd64.AppImage"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

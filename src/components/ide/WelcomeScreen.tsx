@@ -1,48 +1,110 @@
 'use client';
 
-import { Cpu, FileCode, Plus, FolderOpen, ExternalLink, Github, Heart, BookOpen, Clock } from 'lucide-react';
+import { Cpu, FileCode, Plus, FolderOpen, ExternalLink, Github, Heart, BookOpen, Clock, Sparkles, Play } from 'lucide-react';
 import { useIDEStore } from '@/store/ide-store';
-import { openProjectFile } from '@/lib/tauri-db';
+import { openProjectFile, createNewProject } from '@/lib/tauri-db';
+import { toast } from 'sonner';
 
 export function WelcomeScreen() {
   const { setIsNewProjectDialogOpen } = useIDEStore();
 
+  const launchDemo = (name: string, desc: string, template: string) => {
+    try {
+      createNewProject(name, desc, template);
+      toast.success(`Loaded demo: ${name}`);
+    } catch (err) {
+      toast.error('Failed to launch demo');
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-background p-8">
-      <div className="max-w-lg w-full space-y-6">
+    <div className="h-full flex flex-col items-center justify-center bg-background text-foreground p-8 overflow-y-auto">
+      <div className="max-w-xl w-full space-y-6">
         {/* Header */}
         <div className="flex items-center justify-center gap-3">
-          <div className="p-2 bg-muted rounded-xl">
-            <Cpu className="h-8 w-8 text-blue-500" />
+          <div className="p-2.5 bg-blue-600/10 border border-blue-500/30 rounded-xl">
+            <Cpu className="h-8 w-8 text-blue-400" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Verisim IDE</h1>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Verisim IDE</h1>
+            <p className="text-xs text-blue-400 font-semibold uppercase tracking-wider">All-in-One EDA Workstation</p>
+          </div>
         </div>
 
-        <p className="text-center text-muted-foreground">
-          Verilog development environment with Icarus Verilog simulation and waveform viewing.
+        <p className="text-center text-sm text-muted-foreground">
+          Integrated Digital Design environment powered by Icarus Verilog, Verilator, Python Verification, and Offline HDL Assist.
         </p>
 
+        {/* Quick Launch Interactive Demos */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <FileCode className="h-3.5 w-3.5 text-blue-500" />
+            <span>Interactive Demo Projects</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {/* Demo 1: Verilog */}
+            <div 
+              onClick={() => launchDemo('Counter_Waveform_Demo', '4-bit synchronous counter with VCD waveform dump', 'basic')}
+              className="p-3 rounded-lg border border-blue-500/30 bg-card hover:bg-blue-500/10 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-blue-400">Verilog Classic</span>
+                <Play className="h-3 w-3 text-blue-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-xs font-medium text-foreground">4-bit Counter</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Testbench & VCD Waveform view</p>
+            </div>
+
+            {/* Demo 2: SystemVerilog */}
+            <div 
+              onClick={() => launchDemo('SV_FIFO_Demo', 'Parameterized synchronous FIFO with SVA assertion', 'systemverilog_fifo')}
+              className="p-3 rounded-lg border border-purple-500/30 bg-card hover:bg-purple-500/10 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-purple-400">SystemVerilog</span>
+                <Play className="h-3 w-3 text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-xs font-medium text-foreground">Sync FIFO Queue</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">always_ff, logic & Assertions</p>
+            </div>
+
+            {/* Demo 3: Python Verification */}
+            <div 
+              onClick={() => launchDemo('ALU_Python_Demo', '8-bit ALU with Python stimulus generator and checker', 'python_verification')}
+              className="p-3 rounded-lg border border-amber-500/30 bg-card hover:bg-amber-500/10 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-amber-400">Python Hub</span>
+                <Play className="h-3 w-3 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-xs font-medium text-foreground">ALU Verification</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Golden model check & test vectors</p>
+            </div>
+          </div>
+        </div>
+
         {/* Quick Actions */}
-        <div className="space-y-3">
+        <div className="space-y-2 pt-1">
           <div 
             onClick={() => setIsNewProjectDialogOpen(true)}
-            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-card hover:bg-muted/60 transition-colors cursor-pointer"
           >
-            <Plus className="h-5 w-5 text-blue-500 shrink-0" />
+            <Plus className="h-5 w-5 text-blue-400 shrink-0" />
             <div className="text-left">
-              <p className="text-sm font-medium">New Project</p>
-              <p className="text-xs text-muted-foreground">Create a project from scratch or use a template</p>
+              <p className="text-sm font-medium text-foreground">New Custom Project</p>
+              <p className="text-xs text-muted-foreground">Create a blank project or start from any HDL template</p>
             </div>
           </div>
 
           <div 
             onClick={openProjectFile}
-            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-card hover:bg-muted/60 transition-colors cursor-pointer"
           >
-            <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
+            <FolderOpen className="h-5 w-5 text-amber-400 shrink-0" />
             <div className="text-left">
-              <p className="text-sm font-medium">Open Project</p>
-              <p className="text-xs text-muted-foreground">Load a .vsm file from your system</p>
+              <p className="text-sm font-medium text-foreground">Open Project</p>
+              <p className="text-xs text-muted-foreground">Load a .vsm workspace file from your filesystem</p>
             </div>
           </div>
         </div>
@@ -51,50 +113,50 @@ export function WelcomeScreen() {
         <div className="pt-2">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <BookOpen className="h-3.5 w-3.5" />
-            Learn Verilog
+            EDA Reference & Guides
           </h3>
           <div className="grid grid-cols-2 gap-2">
             <a
               href="https://www.chipverify.com/verilog/verilog-tutorial"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border text-xs hover:bg-accent/50 transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
-              <ExternalLink className="h-3 w-3 text-blue-500 shrink-0" />
-              <span className="truncate">Verilog Tutorial</span>
+              <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
+              <span className="truncate">Verilog / SV Tutorial</span>
             </a>
             <a
-              href="https://hdlbits.01xz.net/wiki/Main_Page"
+              href="https://verilator.org/guide/latest/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border text-xs hover:bg-accent/50 transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
-              <ExternalLink className="h-3 w-3 text-blue-500 shrink-0" />
-              <span className="truncate">HDLBits Practice</span>
+              <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
+              <span className="truncate">Verilator Manual</span>
             </a>
             <a
-              href="https://www.asic-world.com/verilog/veritut.html"
+              href="https://docs.cocotb.org/en/stable/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border text-xs hover:bg-accent/50 transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
-              <ExternalLink className="h-3 w-3 text-blue-500 shrink-0" />
-              <span className="truncate">ASIC World</span>
+              <ExternalLink className="h-3 w-3 text-amber-400 shrink-0" />
+              <span className="truncate">Cocotb Python Verification</span>
             </a>
             <a
               href="https://steveicarus.github.io/iverilog/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border text-xs hover:bg-accent/50 transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
-              <ExternalLink className="h-3 w-3 text-blue-500 shrink-0" />
+              <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
               <span className="truncate">Icarus Verilog Docs</span>
             </a>
           </div>
         </div>
 
         {/* Footer: GitHub + Credits */}
-        <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+        <div className="pt-4 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
           <a
             href="https://github.com/MISTERNEGATIVE21/Verisim"
             target="_blank"
@@ -107,13 +169,11 @@ export function WelcomeScreen() {
           
           <div className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
-            <span>v1.0.0</span>
+            <span>v2.0.0 (All-in-One)</span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span>Made with</span>
-            <Heart className="h-3 w-3 text-red-500" />
-            <span>by <a href="https://github.com/MISTERNEGATIVE21" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors font-medium">MISTERNEGATIVE21</a></span>
+            <span>By <a href="https://github.com/MISTERNEGATIVE21" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors font-medium">MISTERNEGATIVE21</a></span>
           </div>
         </div>
       </div>

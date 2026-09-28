@@ -29,6 +29,15 @@ export interface SimulationResult {
   installationGuide?: string;
 }
 
+export type SimulationEngine = 'iverilog' | 'verilator' | 'both';
+export type DockTab = 'console' | 'python' | 'waveform';
+
+export interface PythonResult {
+  success: boolean;
+  output: string;
+  exit_code: number;
+}
+
 interface IDEState {
   // Projects
   projects: Project[];
@@ -48,19 +57,50 @@ interface IDEState {
   closeFile: (fileId: string) => void;
   updateFileContent: (fileId: string, content: string) => void;
 
-  // Simulation
+  // Simulation & Engine
+  selectedEngine: SimulationEngine;
+  setSelectedEngine: (engine: SimulationEngine) => void;
   isSimulating: boolean;
   simulationResult: SimulationResult | null;
   setSimulating: (simulating: boolean) => void;
   setSimulationResult: (result: SimulationResult | null) => void;
 
-  // UI State
+  // Python Verification Hub
+  pythonResult: PythonResult | null;
+  isPythonRunning: boolean;
+  setPythonRunning: (running: boolean) => void;
+  setPythonResult: (result: PythonResult | null) => void;
+
+  // Editor features & AI
+  autoSuggestEnabled: boolean;
+  setAutoSuggestEnabled: (enabled: boolean) => void;
+  toggleAutoSuggest: () => void;
+  highlightPrimitives: boolean;
+  setHighlightPrimitives: (enabled: boolean) => void;
+  toggleHighlightPrimitives: () => void;
+  highlightSystemTasks: boolean;
+  setHighlightSystemTasks: (enabled: boolean) => void;
+  toggleHighlightSystemTasks: () => void;
+
+  // UI State & All-in-One Docking
   showWaveform: boolean;
   setShowWaveform: (show: boolean) => void;
+  activeDockTab: DockTab;
+  setActiveDockTab: (tab: DockTab) => void;
+  dockCollapsed: boolean;
+  setDockCollapsed: (collapsed: boolean) => void;
+  dockMaximized: boolean;
+  setDockMaximized: (maximized: boolean) => void;
+  isAiAssistOpen: boolean;
+  setIsAiAssistOpen: (open: boolean) => void;
+  toggleAiAssist: () => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   isNewProjectDialogOpen: boolean;
   setIsNewProjectDialogOpen: (open: boolean) => void;
+  waveformLayout: 'dock' | 'side-by-side';
+  setWaveformLayout: (layout: 'dock' | 'side-by-side') => void;
+  toggleWaveformLayout: () => void;
 }
 
 export const useIDEStore = create<IDEState>((set, get) => ({
@@ -71,8 +111,27 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   // Current active project
   currentProject: null,
   projectPath: null,
-  setCurrentProject: (project, path = null) => 
-    set({ currentProject: project, projectPath: path, openFiles: [], activeFile: null }),
+  setCurrentProject: (project, path) => 
+    set((state) => {
+      if (!project) {
+        return { currentProject: null, projectPath: null, openFiles: [], activeFile: null };
+      }
+      const isSameProject = state.currentProject?.id === project.id;
+      const targetPath = path !== undefined ? path : state.projectPath;
+      if (isSameProject) {
+        return {
+          currentProject: project,
+          projectPath: targetPath,
+        };
+      }
+      const initialFile = project.files?.[0] || null;
+      return {
+        currentProject: project,
+        projectPath: targetPath || null,
+        openFiles: initialFile ? [initialFile] : [],
+        activeFile: initialFile
+      };
+    }),
   setProjectFiles: (files) => set((state) => ({
     currentProject: state.currentProject ? { ...state.currentProject, files, updated_at: new Date().toISOString() } : null
   })),
@@ -121,17 +180,50 @@ export const useIDEStore = create<IDEState>((set, get) => ({
     });
   },
 
-  // Simulation
+  // Simulation & Engine
+  selectedEngine: 'iverilog',
+  setSelectedEngine: (engine) => set({ selectedEngine: engine }),
   isSimulating: false,
   simulationResult: null,
   setSimulating: (simulating) => set({ isSimulating: simulating }),
   setSimulationResult: (result) => set({ simulationResult: result }),
 
-  // UI State
-  showWaveform: false,
+  // Python Verification Hub
+  pythonResult: null,
+  isPythonRunning: false,
+  setPythonRunning: (running) => set({ isPythonRunning: running }),
+  setPythonResult: (result) => set({ pythonResult: result }),
+
+  // Editor features & AI
+  autoSuggestEnabled: true,
+  setAutoSuggestEnabled: (enabled) => set({ autoSuggestEnabled: enabled }),
+  toggleAutoSuggest: () => set((state) => ({ autoSuggestEnabled: !state.autoSuggestEnabled })),
+  highlightPrimitives: true,
+  setHighlightPrimitives: (enabled) => set({ highlightPrimitives: enabled }),
+  toggleHighlightPrimitives: () => set((state) => ({ highlightPrimitives: !state.highlightPrimitives })),
+  highlightSystemTasks: true,
+  setHighlightSystemTasks: (enabled) => set({ highlightSystemTasks: enabled }),
+  toggleHighlightSystemTasks: () => set((state) => ({ highlightSystemTasks: !state.highlightSystemTasks })),
+
+  // UI State & All-in-One Docking
+  showWaveform: true,
   setShowWaveform: (show) => set({ showWaveform: show }),
+  activeDockTab: 'console',
+  setActiveDockTab: (tab) => set({ activeDockTab: tab, dockCollapsed: false }),
+  dockCollapsed: false,
+  setDockCollapsed: (collapsed) => set({ dockCollapsed: collapsed }),
+  dockMaximized: false,
+  setDockMaximized: (maximized) => set({ dockMaximized: maximized }),
+  isAiAssistOpen: false,
+  setIsAiAssistOpen: (open) => set({ isAiAssistOpen: open }),
+  toggleAiAssist: () => set((state) => ({ isAiAssistOpen: !state.isAiAssistOpen })),
   sidebarCollapsed: false,
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   isNewProjectDialogOpen: false,
   setIsNewProjectDialogOpen: (open) => set({ isNewProjectDialogOpen: open }),
+  waveformLayout: 'dock',
+  setWaveformLayout: (layout) => set({ waveformLayout: layout }),
+  toggleWaveformLayout: () => set((state) => ({
+    waveformLayout: state.waveformLayout === 'dock' ? 'side-by-side' : 'dock'
+  })),
 }));

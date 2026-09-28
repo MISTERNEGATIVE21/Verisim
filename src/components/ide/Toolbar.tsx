@@ -1,6 +1,6 @@
 'use client';
 
-import { useIDEStore } from '@/store/ide-store';
+import { useIDEStore, SimulationEngine } from '@/store/ide-store';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -10,6 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -40,22 +49,31 @@ import {
   Download,
   Monitor,
   Cpu,
+  Wand2,
+  Columns2,
   Trash2,
-  FolderOpen
+  FolderOpen,
+  Sparkles,
+  Settings2,
+  Check
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { 
   createNewProject,
   saveProjectFile,
   openProjectFile,
-  runSimulation as tauriRunSimulation
+  runSimulation as tauriRunSimulation,
+  runPythonScript
 } from '@/lib/tauri-db';
 
 const PROJECT_TEMPLATES = [
   { id: 'none', name: 'Empty Project', description: 'Start with a single blank Verilog file' },
   { id: 'basic', name: 'Counter (Basic)', description: '4-bit counter with testbench' },
+  { id: 'systemverilog_fifo', name: 'SystemVerilog FIFO', description: 'Parameterized synchronous FIFO with assertions' },
+  { id: 'python_verification', name: 'Python Verification Demo', description: 'ALU module verified with Python test vectors' },
   { id: 'mux', name: 'Multiplexer', description: '4-to-1 MUX with testbench' },
   { id: 'alu', name: 'ALU', description: 'Simple ALU with multiple operations' },
   { id: 'fsm', name: 'FSM', description: 'Traffic light controller FSM' },
@@ -67,6 +85,7 @@ const PROJECT_TEMPLATES = [
 const KEYBOARD_SHORTCUTS = [
   { keys: ['Ctrl', 'S'], action: 'Save current file' },
   { keys: ['Ctrl', 'Enter'], action: 'Run simulation' },
+  { keys: ['Alt', 'A'], action: 'Toggle Auto-Suggestions' },
   { keys: ['Ctrl', 'N'], action: 'New project' },
   { keys: ['Ctrl', 'B'], action: 'Toggle sidebar' },
   { keys: ['Ctrl', 'W'], action: 'Close current file' },
@@ -81,8 +100,22 @@ export function Toolbar() {
     isSimulating, 
     setSimulating,
     setSimulationResult,
-    showWaveform,
-    setShowWaveform,
+    waveformLayout,
+    toggleWaveformLayout,
+    selectedEngine,
+    setSelectedEngine,
+    autoSuggestEnabled,
+    toggleAutoSuggest,
+    highlightPrimitives,
+    toggleHighlightPrimitives,
+    highlightSystemTasks,
+    toggleHighlightSystemTasks,
+    isAiAssistOpen,
+    toggleAiAssist,
+    isPythonRunning,
+    setPythonRunning,
+    setPythonResult,
+    setActiveDockTab,
     sidebarCollapsed,
     setSidebarCollapsed,
     activeFile,
@@ -94,6 +127,85 @@ export function Toolbar() {
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('none');
   const [saving, setSaving] = useState(false);
+
+  const saveProject = useCallback(async () => {
+    if (!currentProject) return;
+    
+    setSaving(true);
+    try {
+      await saveProjectFile(false);
+      toast.success('Project saved');
+    } catch (error) {
+      console.error('Failed to save project:', error);
+      toast.error('Failed to save project');
+    } finally {
+      setTimeout(() => setSaving(false), 500);
+    }
+  }, [currentProject]);
+
+  const runSimulation = useCallback(async () => {
+    if (!currentProject || isSimulating) return;
+    
+    setSimulating(true);
+    setSimulationResult(null);
+    setActiveDockTab('console');
+    
+    try {
+      const result = await tauriRunSimulation(currentProject.id, currentProject.files, selectedEngine);
+      setSimulationResult(result as any);
+      if (result.success) {
+        toast.success(`${selectedEngine === 'verilator' ? 'Verilator Lint' : 'Simulation'} finished successfully`);
+      } else {
+        toast.error('Simulation finished with diagnostics/errors');
+      }
+    } catch (error) {
+      console.error('Simulation failed:', error);
+      setSimulationResult({
+        success: false,
+        output: 'Failed to run simulation. Please check your toolchain installation.',
+        error: 'Execution error',
+      });
+      toast.error('Simulation execution failed');
+    } finally {
+      setSimulating(false);
+    }
+  }, [currentProject, isSimulating, selectedEngine, setSimulating, setSimulationResult, setActiveDockTab]);
+
+  const handleRunPython = useCallback(async () => {
+    if (!currentProject || isPythonRunning) return;
+
+    // Pick target python script
+    const targetScript = activeFile?.name.endsWith('.py') 
+      ? activeFile.name 
+      : currentProject.files.find(f => f.name.endsWith('.py'))?.name;
+
+    if (!targetScript) {
+      toast.error('No .py file found in project to execute');
+      return;
+    }
+
+    setPythonRunning(true);
+    setPythonResult(null);
+    setActiveDockTab('python');
+
+    try {
+      const result = await runPythonScript(targetScript, currentProject.files);
+      setPythonResult(result);
+      if (result.success) {
+        toast.success(`Python script ${targetScript} completed`);
+      } else {
+        toast.error(`Python script ${targetScript} failed`);
+      }
+    } catch (err) {
+      setPythonResult({
+        success: false,
+        output: `Error running python: ${err}`,
+        exit_code: -1
+      });
+    } finally {
+      setPythonRunning(false);
+    }
+  }, [currentProject, activeFile, isPythonRunning, setPythonRunning, setPythonResult, setActiveDockTab]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -122,7 +234,7 @@ export function Toolbar() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sidebarCollapsed, activeFile, currentProject, isSimulating]);
+  }, [sidebarCollapsed, activeFile, currentProject, isSimulating, saveProject, runSimulation, setIsNewProjectDialogOpen, setSidebarCollapsed]);
 
   const createProject = () => {
     if (!newProjectName.trim()) return;
@@ -133,72 +245,47 @@ export function Toolbar() {
       setNewProjectName('');
       setNewProjectDesc('');
       setSimulationResult(null);
-      setShowWaveform(false);
+      setPythonResult(null);
+      toast.success(`Created project "${newProjectName}"`);
     } catch (error) {
       console.error('Failed to create project:', error);
-      alert('Failed to create project. Please try again.');
+      toast.error('Failed to create project. Please try again.');
     }
   };
 
   const closeProject = () => {
     setCurrentProject(null);
     setSimulationResult(null);
-    setShowWaveform(false);
+    setPythonResult(null);
   };
 
-  const saveProject = useCallback(async () => {
-    if (!currentProject) return;
-    
-    setSaving(true);
-    try {
-      await saveProjectFile(false);
-    } catch (error) {
-      console.error('Failed to save project:', error);
-    } finally {
-      setTimeout(() => setSaving(false), 500);
-    }
-  }, [currentProject]);
-
-  const runSimulation = useCallback(async () => {
-    if (!currentProject || isSimulating) return;
-    
-    setSimulating(true);
-    setSimulationResult(null);
-    
-    try {
-      const result = await tauriRunSimulation(currentProject.id, currentProject.files);
-      setSimulationResult(result as any);
-    } catch (error) {
-      console.error('Simulation failed:', error);
-      setSimulationResult({
-        success: false,
-        output: 'Failed to run simulation. Please try again.',
-        error: 'Connection error',
-      });
-    } finally {
-      setSimulating(false);
-    }
-  }, [currentProject, isSimulating]);
+  const hasPython = currentProject?.files.some(f => f.name.endsWith('.py')) || false;
 
   return (
-    <div className="flex flex-col md:flex-row items-center justify-between px-4 py-2 gap-2 border-b border-border bg-background">
+    <div className="flex flex-col md:flex-row items-center justify-between px-3 py-1.5 gap-2 border-b border-border/70 bg-card text-foreground select-none">
       {/* Left Section - Logo and Project Selection */}
-      <div className="flex items-center justify-between w-full md:w-auto gap-4">
+      <div className="flex items-center justify-between w-full md:w-auto gap-3">
         <div className="flex items-center gap-2">
-          <Code2 className="h-6 w-6 text-blue-500" />
-          <span className="font-bold text-lg hidden sm:inline">Verisim</span>
-          <Badge variant="secondary" className="text-xs">IDE</Badge>
+          <div className="h-7 w-7 rounded bg-blue-600/10 border border-blue-500/40 flex items-center justify-center">
+            <Code2 className="h-4 w-4 text-blue-400" />
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-bold text-sm tracking-tight text-foreground">Verisim</span>
+            <Badge variant="outline" className="text-[10px] font-semibold py-0 px-1 text-blue-400 border-blue-500/30">
+              All-in-One
+            </Badge>
+          </div>
         </div>
         
         {currentProject && (
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col">
-              <span className="text-sm font-medium">{currentProject.name}</span>
-            </div>
+          <div className="flex items-center gap-2 pl-2 border-l border-border/50">
+            <span className="text-xs font-medium text-foreground truncate max-w-[130px]">
+              {currentProject.name}
+            </span>
             <Button 
               variant="ghost" 
               size="sm" 
-              className="h-8 text-muted-foreground hover:text-foreground"
+              className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
               onClick={closeProject}
               title="Close Project"
             >
@@ -208,59 +295,58 @@ export function Toolbar() {
         )}
       </div>
 
-      {/* Center Section - Actions */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 max-w-full no-scrollbar">
+      {/* Center Section - Engine, Run Buttons, and Modes */}
+      <div className="flex items-center gap-1.5 overflow-x-auto max-w-full no-scrollbar py-0.5">
         {/* New Project Dialog */}
         <Dialog open={isNewProjectDialogOpen} onOpenChange={setIsNewProjectDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 shrink-0">
-              <Plus className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">New Project</span>
-              <span className="sm:hidden">New</span>
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs shrink-0 border-border/60">
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              <span>New</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] w-[95vw] sm:w-full">
+          <DialogContent className="sm:max-w-[440px] w-[95vw] sm:w-full bg-card border-border/80 text-foreground">
             <DialogHeader>
-              <DialogTitle>Create New Project</DialogTitle>
+              <DialogTitle>Create New EDA Project</DialogTitle>
               <DialogDescription>
-                Choose a template or start from scratch.
+                Choose from Verilog, SystemVerilog, or Python verification starter templates.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Project Name</Label>
+            <div className="grid gap-3 py-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="name" className="text-xs">Project Name</Label>
                 <Input
                   id="name"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="My Verilog Project"
+                  placeholder="e.g. FIFO_Controller"
                   autoFocus
+                  className="bg-background border-border/60 text-xs"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="description">Description (optional)</Label>
+              <div className="grid gap-1.5">
+                <Label htmlFor="description" className="text-xs">Description (optional)</Label>
                 <Textarea
                   id="description"
                   value={newProjectDesc}
                   onChange={(e) => setNewProjectDesc(e.target.value)}
-                  placeholder="A brief description of your project..."
+                  placeholder="Description of target architecture..."
                   rows={2}
+                  className="bg-background border-border/60 text-xs"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label>Template</Label>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Template</Label>
                 <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background border-border/60 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background border-border/80 text-xs">
                     {PROJECT_TEMPLATES.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
-                        <div className="flex flex-col items-start text-left">
-                          <span>{template.name}</span>
-                          <span className="text-[10px] sm:text-xs text-muted-foreground line-clamp-1">
-                            {template.description}
-                          </span>
+                        <div className="flex flex-col text-left py-0.5">
+                          <span className="font-medium">{template.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{template.description}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -269,324 +355,249 @@ export function Toolbar() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsNewProjectDialogOpen(false)}>
+              <Button variant="ghost" size="sm" onClick={() => setIsNewProjectDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={createProject} disabled={!newProjectName.trim()}>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={createProject}>
                 Create Project
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Open Project */}
-        <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={openProjectFile}>
-          <FolderOpen className="h-4 w-4 mr-1" />
-          <span className="hidden sm:inline">Open Project</span>
-          <span className="sm:hidden">Open</span>
-        </Button>
+        {/* Save Project Button */}
+        {currentProject && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-7 px-2 text-xs shrink-0 border-border/60"
+            onClick={saveProject}
+            disabled={saving}
+            title="Save Project (Ctrl+S)"
+          >
+            <Save className="h-3.5 w-3.5 mr-1" />
+            <span className="hidden sm:inline">Save</span>
+          </Button>
+        )}
 
-        {/* Save Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0"
-          onClick={saveProject}
-          disabled={!currentProject || saving}
-          title="Save Project (Ctrl+S)"
+        <div className="h-4 w-[1px] bg-border/40 mx-1 hidden sm:block" />
+
+        {/* Engine Selector */}
+        <Select 
+          value={selectedEngine} 
+          onValueChange={(val) => setSelectedEngine(val as SimulationEngine)}
         >
-          <Save className={cn("h-4 w-4 mr-1", saving && "text-green-500")} />
-          <span className="hidden sm:inline">{saving ? 'Saved!' : 'Save Project'}</span>
-        </Button>
+          <SelectTrigger className="h-7 text-xs w-[145px] shrink-0 bg-background border-border/60 font-medium">
+            <Cpu className="h-3.5 w-3.5 mr-1 text-blue-400" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-background border-border/80 text-xs">
+            <SelectItem value="iverilog">Icarus (-g2012)</SelectItem>
+            <SelectItem value="verilator">Verilator Lint</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* Run Simulation Button */}
         <Button
           size="sm"
-          className="h-8 bg-green-600 hover:bg-green-700 shrink-0"
+          className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 font-medium shadow-sm"
           onClick={runSimulation}
           disabled={!currentProject || isSimulating}
+          title="Run Simulation (Ctrl+Enter)"
         >
           {isSimulating ? (
             <>
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              <span className="hidden sm:inline">Running...</span>
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              <span>Simulating...</span>
             </>
           ) : (
             <>
-              <Play className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Run Simulation</span>
-              <span className="sm:hidden">Run</span>
+              <Play className="h-3.5 w-3.5 mr-1 fill-white" />
+              <span>{selectedEngine === 'verilator' ? 'Lint' : 'Simulate'}</span>
             </>
           )}
         </Button>
+
+        {/* Run Python Button */}
+        {currentProject && (
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn(
+              "h-7 px-2 text-xs shrink-0 font-medium border-border/60",
+              hasPython ? "text-amber-400 border-amber-500/30 hover:bg-amber-500/10" : "opacity-60"
+            )}
+            onClick={handleRunPython}
+            disabled={isPythonRunning}
+            title="Run Python Verification Script"
+          >
+            {isPythonRunning ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <span className="text-xs mr-1">🐍</span>
+            )}
+            <span>Python</span>
+          </Button>
+        )}
+
+        <div className="h-4 w-[1px] bg-border/40 mx-1 hidden sm:block" />
+
+        {/* Waveform Layout Toggle (Side-by-Side vs Dock) */}
+        {currentProject && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-7 px-2 text-xs shrink-0 border-border/60",
+              waveformLayout === 'side-by-side' ? "bg-blue-500/10 text-blue-500 border-blue-500/30" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={toggleWaveformLayout}
+            title="Toggle Side-by-Side Waveform Split (Ctrl+Alt+W)"
+          >
+            <Columns2 className="h-3.5 w-3.5 mr-1 text-blue-500" />
+            <span className="hidden sm:inline">{waveformLayout === 'side-by-side' ? 'Side Waveform' : 'Dock Waveform'}</span>
+          </Button>
+        )}
+
+        {/* Code Suggestions Pill Toggle */}
+        <button
+          onClick={toggleAutoSuggest}
+          className={cn(
+            "flex items-center gap-1.5 h-7 px-2 rounded border text-xs font-medium shrink-0 transition-colors",
+            autoSuggestEnabled 
+              ? "bg-blue-500/10 text-blue-500 border-blue-500/40 hover:bg-blue-500/20" 
+              : "bg-muted/20 text-muted-foreground border-border/40 hover:bg-muted/40"
+          )}
+          title="Toggle Code Snippets (Alt+A)"
+        >
+          <Zap className="h-3 w-3 text-amber-500" />
+          <span className="hidden sm:inline">Assist:</span>
+          <span>{autoSuggestEnabled ? 'ON' : 'OFF'}</span>
+        </button>
+
+        {/* HDL Design Assistant Trigger */}
+        <Button
+          variant={isAiAssistOpen ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "h-7 px-2 text-xs shrink-0 border-border/60",
+            isAiAssistOpen ? "bg-blue-600 hover:bg-blue-700 text-white" : "hover:text-blue-500"
+          )}
+          onClick={toggleAiAssist}
+          title="Toggle HDL Design & Testbench Assistant"
+        >
+          <Wand2 className="h-3.5 w-3.5 mr-1 text-blue-500" />
+          <span className="hidden sm:inline">HDL Assistant</span>
+        </Button>
       </div>
 
-      {/* Right Section - View Options */}
-      <div className="flex items-center gap-2 md:ml-auto">
+      {/* Right Section - Settings & Documentation */}
+      <div className="flex items-center gap-1.5 md:ml-auto">
+        {/* Syntax Highlight Settings Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" title="Editor Settings">
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-background border-border/80 text-xs w-52">
+            <DropdownMenuLabel>Highlight Options</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-border/40" />
+            <DropdownMenuCheckboxItem
+              checked={highlightPrimitives}
+              onCheckedChange={toggleHighlightPrimitives}
+            >
+              Highlight Gate Primitives
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={highlightSystemTasks}
+              onCheckedChange={toggleHighlightSystemTasks}
+            >
+              Highlight System Tasks ($)
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator className="bg-border/40" />
+            <DropdownMenuCheckboxItem
+              checked={autoSuggestEnabled}
+              onCheckedChange={toggleAutoSuggest}
+            >
+              Inline Auto-Suggestions
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <ThemeToggle />
-        
-        <Button
-          variant={showWaveform ? "default" : "outline"}
-          size="sm"
-          className="h-8 shrink-0"
-          onClick={() => setShowWaveform(!showWaveform)}
-          disabled={!currentProject}
-        >
-          <Activity className="h-4 w-4 mr-1" />
-          <span className="hidden sm:inline">Waveform</span>
-        </Button>
-        
+
         {/* Documentation Dialog */}
         <Dialog open={docsOpen} onOpenChange={setDocsOpen}>
           <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 shrink-0">
-              <BookOpen className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Docs</span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0 text-muted-foreground hover:text-foreground">
+              <BookOpen className="h-3.5 w-3.5 mr-1" />
+              <span>Docs</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[700px] w-[95vw] sm:w-full max-h-[85vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[700px] w-[95vw] sm:w-full max-h-[85vh] overflow-y-auto bg-card border-border/80 text-foreground">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5" />
-                Verisim IDE Documentation
+                <BookOpen className="h-5 w-5 text-blue-400" />
+                Verisim All-in-One IDE Manual
               </DialogTitle>
               <DialogDescription>
-                Learn how to use the Verisim IDE for digital logic design
+                SystemVerilog, Icarus, Verilator, Python verification, and offline AI write assist guide.
               </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-6 py-4">
-              {/* Getting Started */}
+            <div className="space-y-5 py-3 text-xs">
               <section>
-                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-amber-500" />
-                  Getting Started
-                </h3>
-                <div className="text-sm text-muted-foreground space-y-2">
-                  <p>1. Click <strong>New Project</strong> to create a new Verilog project</p>
-                  <p>2. Select a template (Counter, MUX, ALU, or FSM)</p>
-                  <p>3. Edit your Verilog code in the editor</p>
-                  <p>4. Click <strong>Run Simulation</strong> to compile and test</p>
-                  <p>5. View waveforms in the Waveform panel</p>
+                <h4 className="font-semibold text-sm mb-1.5 flex items-center gap-1.5 text-blue-400">
+                  <Cpu className="h-4 w-4" />
+                  Dual-Engine Simulation & Linting
+                </h4>
+                <div className="space-y-1.5 text-muted-foreground leading-relaxed">
+                  <p>• <strong>Icarus Verilog:</strong> Simulates Verilog and SystemVerilog with full IEEE 1800-2012 flag (`-g2012`) and generates standard `.vcd` waveform dumps.</p>
+                  <p>• <strong>Verilator:</strong> Performs high-speed cycle-accurate linting and static analysis, flagging inferred latches and bit-width mismatches.</p>
                 </div>
               </section>
 
-              {/* Keyboard Shortcuts */}
               <section>
-                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                  <Keyboard className="h-4 w-4 text-blue-500" />
-                  Keyboard Shortcuts
-                </h3>
-                <div className="space-y-2">
+                <h4 className="font-semibold text-sm mb-1.5 flex items-center gap-1.5 text-amber-400">
+                  <span className="text-sm">🐍</span>
+                  Python Verification Hub
+                </h4>
+                <div className="space-y-1.5 text-muted-foreground leading-relaxed">
+                  <p>• Execute Python 3 test vector generators and output checkers directly inside your project.</p>
+                  <p>• Generate `.hex` / `.mem` stimulus loaded via `$readmemh` into HDL testbenches.</p>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="font-semibold text-sm mb-1.5 flex items-center gap-1.5 text-purple-400">
+                  <Sparkles className="h-4 w-4" />
+                  Offline AI Write Assist & Auto-Suggestions
+                </h4>
+                <div className="space-y-1.5 text-muted-foreground leading-relaxed">
+                  <p>• <strong>Instant Testbench Generator:</strong> Automatically inspects module ports and creates a full testbench with clocks, resets, and stimulus.</p>
+                  <p>• <strong>Auto-Suggest Mode (Alt+A):</strong> Monaco intelligent inline completions for `always_ff`, `always_comb`, `$dumpfile`, and module instantiation.</p>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="font-semibold text-sm mb-1.5 flex items-center gap-1.5 text-foreground">
+                  <Keyboard className="h-4 w-4" />
+                  Shortcuts
+                </h4>
+                <div className="grid grid-cols-2 gap-2">
                   {KEYBOARD_SHORTCUTS.map((shortcut, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
+                    <div key={i} className="flex items-center justify-between p-1.5 bg-background rounded border border-border/40">
                       <span className="text-muted-foreground">{shortcut.action}</span>
                       <div className="flex gap-1">
                         {shortcut.keys.map((key, j) => (
-                          <kbd key={j} className="px-2 py-0.5 bg-muted rounded text-xs font-mono">
+                          <kbd key={j} className="px-1.5 py-0.5 bg-muted/40 rounded text-[10px] font-mono text-foreground">
                             {key}
                           </kbd>
                         ))}
                       </div>
                     </div>
                   ))}
-                </div>
-              </section>
-
-              {/* Installing Icarus Verilog */}
-              <section>
-                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                  <Terminal className="h-4 w-4 text-green-500" />
-                  Installing Icarus Verilog
-                </h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  To run real Verilog simulations, install Icarus Verilog on your system:
-                </p>
-                
-                <Tabs defaultValue="ubuntu" className="w-full">
-                  <TabsList className="grid grid-cols-4 h-9">
-                    <TabsTrigger value="ubuntu" className="text-xs">
-                      <Cpu className="h-3 w-3 mr-1" />
-                      Ubuntu
-                    </TabsTrigger>
-                    <TabsTrigger value="arch" className="text-xs">
-                      <Cpu className="h-3 w-3 mr-1" />
-                      Arch
-                    </TabsTrigger>
-                    <TabsTrigger value="fedora" className="text-xs">
-                      <Cpu className="h-3 w-3 mr-1" />
-                      Fedora
-                    </TabsTrigger>
-                    <TabsTrigger value="macos" className="text-xs">
-                      <Monitor className="h-3 w-3 mr-1" />
-                      macOS
-                    </TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="ubuntu" className="mt-3">
-                    <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                      <div className="text-blue-500 font-semibold"># Ubuntu / Debian / Linux Mint / Pop!_OS</div>
-                      <div>sudo apt-get update</div>
-                      <div>sudo apt-get install iverilog</div>
-                      <div className="mt-2 text-muted-foreground"># Verify installation:</div>
-                      <div>iverilog -V</div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="arch" className="mt-3">
-                    <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                      <div className="text-blue-500 font-semibold"># Arch Linux / Manjaro / EndeavourOS</div>
-                      <div className="text-muted-foreground"># Using pacman:</div>
-                      <div>sudo pacman -S iverilog</div>
-                      <div className="mt-2 text-muted-foreground"># Or using yay (AUR):</div>
-                      <div>yay -S iverilog</div>
-                      <div className="mt-2 text-muted-foreground"># Or using paru:</div>
-                      <div>paru -S iverilog</div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="fedora" className="mt-3">
-                    <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                      <div className="text-blue-500 font-semibold"># Fedora / RHEL / CentOS / Rocky Linux</div>
-                      <div>sudo dnf install iverilog</div>
-                      <div className="mt-2 text-muted-foreground"># For RHEL/CentOS with EPEL:</div>
-                      <div>sudo dnf install epel-release</div>
-                      <div>sudo dnf install iverilog</div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="macos" className="mt-3">
-                    <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                      <div className="text-blue-500 font-semibold"># macOS</div>
-                      <div className="text-muted-foreground"># Using Homebrew:</div>
-                      <div>brew install icarus-verilog</div>
-                      <div className="mt-2 text-muted-foreground"># Using MacPorts:</div>
-                      <div>sudo port install iverilog</div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                {/* Other Linux Distros */}
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2">Other Linux Distributions</h4>
-                  <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                    <div><span className="text-blue-500"># openSUSE:</span> sudo zypper install iverilog</div>
-                    <div><span className="text-blue-500"># Gentoo:</span> sudo emerge sci-electronics/iverilog</div>
-                    <div><span className="text-blue-500"># Alpine:</span> sudo apk add iverilog</div>
-                    <div><span className="text-blue-500"># Void Linux:</span> sudo xbps-install -S iverilog</div>
-                    <div><span className="text-blue-500"># Solus:</span> sudo eopkg install iverilog</div>
-                    <div><span className="text-blue-500"># NixOS:</span> nix-env -i iverilog</div>
-                  </div>
-                </div>
-
-                {/* Auto Install Script */}
-                <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-md">
-                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Download className="h-4 w-4 text-blue-500" />
-                    Auto-Install Script
-                  </h4>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Run this script to automatically detect your OS and install Icarus Verilog:
-                  </p>
-                  <code className="block bg-muted p-2 rounded text-xs font-mono overflow-x-auto">
-                    curl -fsSL https://raw.githubusercontent.com/MISTERNEGATIVE21/Verisim/main/scripts/install-iverilog.sh | bash
-                  </code>
-                </div>
-
-                {/* Android */}
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Cpu className="h-4 w-4 text-green-500" />
-                    Android (Termux)
-                  </h4>
-                  <div className="bg-muted p-3 rounded-md font-mono text-xs space-y-2">
-                    <div className="text-blue-500 font-semibold"># Install Termux from F-Droid</div>
-                    <div>pkg update && pkg upgrade</div>
-                    <div>pkg install tmux iverilog</div>
-                    <div className="mt-2 text-muted-foreground"># Start a tmux session (keeps simulation running):</div>
-                    <div>tmux new -s sim</div>
-                    <div className="mt-2 text-muted-foreground"># Verify installation:</div>
-                    <div>iverilog -V</div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    On Android, install <strong>Termux</strong> from F-Droid (not Google Play). 
-                    Use <strong>tmux</strong> to keep simulation sessions alive in the background.
-                  </p>
-                </div>
-
-                {/* Windows */}
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    Windows
-                  </h4>
-                  <div className="text-sm text-muted-foreground space-y-2">
-                    <p>1. Download installer from: <a href="http://bleyer.org/icarus/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">http://bleyer.org/icarus/</a></p>
-                    <p>2. Run the installer and follow the prompts</p>
-                    <p>3. Add Icarus Verilog to your PATH during installation</p>
-                    <p className="text-xs mt-2">Alternatively, use WSL (Windows Subsystem for Linux) with Ubuntu</p>
-                  </div>
-                </div>
-              </section>
-
-              {/* Writing Testbenches */}
-              <section>
-                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                  <FileCode className="h-4 w-4 text-purple-500" />
-                  Writing Testbenches
-                </h3>
-                <div className="text-sm text-muted-foreground space-y-2">
-                  <p>A testbench should include:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Signal declarations (reg for inputs, wire for outputs)</li>
-                    <li>Module instantiation</li>
-                    <li>Clock generation (if needed)</li>
-                    <li>Test stimulus in an initial block</li>
-                    <li>$dumpfile and $dumpvars for waveform generation</li>
-                  </ul>
-                </div>
-              </section>
-
-              {/* Links */}
-              <section>
-                <h3 className="text-lg font-semibold mb-2">Resources</h3>
-                <div className="space-y-2 text-sm">
-                  <a 
-                    href="https://steveicarus.github.io/iverilog/usage/install.html" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-blue-500 hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Icarus Verilog Official Documentation
-                  </a>
-                  <a 
-                    href="https://iverilog.fandom.com/wiki/Icarus_Verilog_Wiki" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-blue-500 hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Icarus Verilog Wiki
-                  </a>
-                  <a 
-                    href="https://www.chipverify.com/verilog/verilog-tutorial" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-blue-500 hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Verilog Tutorial (ChipVerify)
-                  </a>
-                  <a 
-                    href="https://github.com/steveicarus/iverilog" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-blue-500 hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Icarus Verilog GitHub
-                  </a>
                 </div>
               </section>
             </div>
