@@ -151,8 +151,8 @@ export function Toolbar() {
     setActiveDockTab('console');
     
     try {
-      const result = await tauriRunSimulation(currentProject.id, currentProject.files, selectedEngine);
-      setSimulationResult(result as any);
+      const result: any = await tauriRunSimulation(currentProject.id, currentProject.files, selectedEngine);
+      setSimulationResult(result);
       if (result.success) {
         toast.success(`${selectedEngine === 'verilator' ? 'Verilator Lint' : 'Simulation'} finished successfully`);
       } else {

@@ -10,7 +10,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3077",
-    "build": "mkdir -p public/vs && cp -rn node_modules/monaco-editor/min/vs/* public/vs/ 2>/dev/null || true && next build",
+    "build": "next build",
     "start": "next start -p ${PORT:-3077}",
     "lint": "eslint .",
     "tauri": "tauri",
