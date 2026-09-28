@@ -54,6 +54,147 @@ pub struct SynthesisResult {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ToolchainConfig {
+    #[serde(default)]
+    pub use_custom_paths: bool,
+    pub iverilog_path: Option<String>,
+    pub vvp_path: Option<String>,
+    pub verilator_path: Option<String>,
+    pub yosys_path: Option<String>,
+    pub python_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ToolStatus {
+    pub name: String,
+    pub found: bool,
+    pub resolved_path: String,
+    pub version: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ToolchainHealth {
+    pub iverilog: ToolStatus,
+    pub vvp: ToolStatus,
+    pub verilator: ToolStatus,
+    pub yosys: ToolStatus,
+    pub python: ToolStatus,
+}
+
+pub fn resolve_tool(
+    name: &str,
+    default_bin: &str,
+    custom_path: Option<&str>,
+    version_arg: &str,
+) -> ToolStatus {
+    let candidate = if let Some(p) = custom_path {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            trimmed.to_string()
+        } else {
+            default_bin.to_string()
+        }
+    } else {
+        default_bin.to_string()
+    };
+
+    let res = Command::new(&candidate).arg(version_arg).output();
+    match res {
+        Ok(output) => {
+            let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+            let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+            let combined = format!("{}\n{}", out_str, err_str);
+
+            let first_meaningful_line = combined
+                .lines()
+                .map(|l| l.trim())
+                .find(|l| !l.is_empty() && !l.starts_with("Unable to get version"))
+                .unwrap_or("Available")
+                .to_string();
+
+            let resolved_path = if candidate.contains('/') {
+                candidate.clone()
+            } else {
+                Command::new("which")
+                    .arg(&candidate)
+                    .output()
+                    .ok()
+                    .and_then(|w| {
+                        let path = String::from_utf8_lossy(&w.stdout).trim().to_string();
+                        if !path.is_empty() {
+                            Some(path)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(candidate)
+            };
+
+            ToolStatus {
+                name: name.to_string(),
+                found: true,
+                resolved_path,
+                version: first_meaningful_line,
+                error: None,
+            }
+        }
+        Err(e) => ToolStatus {
+            name: name.to_string(),
+            found: false,
+            resolved_path: String::new(),
+            version: String::new(),
+            error: Some(format!("{}", e)),
+        },
+    }
+}
+
+#[tauri::command]
+fn check_toolchain(config: Option<ToolchainConfig>) -> Result<ToolchainHealth, String> {
+    let cfg = config.unwrap_or_default();
+    let use_custom = cfg.use_custom_paths;
+
+    let iverilog = resolve_tool(
+        "Icarus Verilog",
+        "iverilog",
+        if use_custom { cfg.iverilog_path.as_deref() } else { None },
+        "-V",
+    );
+    let vvp = resolve_tool(
+        "VVP Runtime",
+        "vvp",
+        if use_custom { cfg.vvp_path.as_deref() } else { None },
+        "-V",
+    );
+    let verilator = resolve_tool(
+        "Verilator",
+        "verilator",
+        if use_custom { cfg.verilator_path.as_deref() } else { None },
+        "--version",
+    );
+    let yosys = resolve_tool(
+        "Yosys Synthesis",
+        "yosys",
+        if use_custom { cfg.yosys_path.as_deref() } else { None },
+        "-V",
+    );
+    let python = resolve_tool(
+        "Python 3",
+        "python3",
+        if use_custom { cfg.python_path.as_deref() } else { None },
+        "--version",
+    );
+
+    Ok(ToolchainHealth {
+        iverilog,
+        vvp,
+        verilator,
+        yosys,
+        python,
+    })
+}
+
 pub fn detect_modules(content: &str) -> Vec<String> {
     let mut modules = Vec::new();
     for line in content.lines() {
@@ -253,8 +394,30 @@ fn save_project(path: String, project: Project) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<SimulationResult, String> {
+async fn simulate(
+    engine: Option<String>,
+    files: Vec<VerilogFile>,
+    toolchain: Option<ToolchainConfig>,
+) -> Result<SimulationResult, String> {
     let chosen_engine = engine.unwrap_or_else(|| "iverilog".to_string());
+    let tc = toolchain.unwrap_or_default();
+
+    let verilator_bin = if tc.use_custom_paths {
+        tc.verilator_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("verilator")
+    } else {
+        "verilator"
+    };
+    let iverilog_bin = if tc.use_custom_paths {
+        tc.iverilog_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("iverilog")
+    } else {
+        "iverilog"
+    };
+    let vvp_bin = if tc.use_custom_paths {
+        tc.vvp_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("vvp")
+    } else {
+        "vvp"
+    };
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -278,7 +441,7 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
 
         // If testbench found: compile with verilator --binary --trace
         if let Some(top_tb) = testbench_module {
-            let mut verilator_cmd = Command::new("verilator");
+            let mut verilator_cmd = Command::new(verilator_bin);
             verilator_cmd
                 .arg("--binary")
                 .arg("--trace")
@@ -361,7 +524,7 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
         }
 
         // Fallback: lint-only if no testbench
-        let mut verilator_cmd = Command::new("verilator");
+        let mut verilator_cmd = Command::new(verilator_bin);
         verilator_cmd.arg("--lint-only").arg("-Wall").arg("-Wno-fatal");
         if has_sv {
             verilator_cmd.arg("--sv");
@@ -390,7 +553,7 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
 
     // Default or both: iverilog simulation
     let vvp_file = temp_dir.join("simulation.vvp");
-    let mut compile_cmd = Command::new("iverilog");
+    let mut compile_cmd = Command::new(iverilog_bin);
     if has_sv {
         compile_cmd.arg("-g2012");
     }
@@ -413,7 +576,7 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
         });
     }
 
-    let mut run_cmd = Command::new("vvp");
+    let mut run_cmd = Command::new(vvp_bin);
     run_cmd.arg(&vvp_file);
     run_cmd.current_dir(&temp_dir);
 
@@ -444,7 +607,19 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
 }
 
 #[tauri::command]
-async fn run_python(script_name: String, files: Vec<VerilogFile>, args: Vec<String>) -> Result<PythonResult, String> {
+async fn run_python(
+    script_name: String,
+    files: Vec<VerilogFile>,
+    args: Vec<String>,
+    toolchain: Option<ToolchainConfig>,
+) -> Result<PythonResult, String> {
+    let tc = toolchain.unwrap_or_default();
+    let python_bin = if tc.use_custom_paths {
+        tc.python_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("python3")
+    } else {
+        "python3"
+    };
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -459,7 +634,7 @@ async fn run_python(script_name: String, files: Vec<VerilogFile>, args: Vec<Stri
     }
 
     let script_path = temp_dir.join(&script_name);
-    let mut cmd = Command::new("python3");
+    let mut cmd = Command::new(python_bin);
     cmd.arg(&script_path);
     for arg in args {
         cmd.arg(arg);
@@ -487,7 +662,18 @@ async fn run_python(script_name: String, files: Vec<VerilogFile>, args: Vec<Stri
 }
 
 #[tauri::command]
-async fn synthesize(files: Vec<VerilogFile>, top_module: Option<String>) -> Result<SynthesisResult, String> {
+async fn synthesize(
+    files: Vec<VerilogFile>,
+    top_module: Option<String>,
+    toolchain: Option<ToolchainConfig>,
+) -> Result<SynthesisResult, String> {
+    let tc = toolchain.unwrap_or_default();
+    let yosys_bin = if tc.use_custom_paths {
+        tc.yosys_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("yosys")
+    } else {
+        "yosys"
+    };
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -527,7 +713,7 @@ async fn synthesize(files: Vec<VerilogFile>, top_module: Option<String>) -> Resu
         read_cmd, top
     );
 
-    let run_res = Command::new("yosys")
+    let run_res = Command::new(yosys_bin)
         .arg("-p")
         .arg(&yosys_script)
         .current_dir(&temp_dir)
@@ -572,16 +758,24 @@ async fn synthesize(files: Vec<VerilogFile>, top_module: Option<String>) -> Resu
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let _ = fs::remove_dir_all(&temp_dir);
+            let not_found_msg = if tc.use_custom_paths && tc.yosys_path.is_some() {
+                format!(
+                    "Yosys binary was not found at configured path: '{}'.\n\nPlease check your toolchain path settings (Settings -> EDA Toolchain) or ensure the binary is executable.",
+                    yosys_bin
+                )
+            } else {
+                "Yosys is not installed or not found in system PATH.\n\nTo enable RTL gate-level synthesis, please install Yosys:\n  • Arch Linux:   sudo pacman -S yosys\n  • Ubuntu/Debian: sudo apt install yosys\n  • Fedora:        sudo dnf install yosys\n  • macOS:         brew install yosys\n\nAlternatively, specify a custom executable path in Settings -> EDA Toolchain.".to_string()
+            };
             Ok(SynthesisResult {
                 success: false,
-                output: "Yosys is not installed or not found in system PATH.\n\nTo enable RTL gate-level synthesis, please install Yosys:\n  • Arch Linux:   sudo pacman -S yosys\n  • Ubuntu/Debian: sudo apt install yosys\n  • Fedora:        sudo dnf install yosys\n  • macOS:         brew install yosys".to_string(),
+                output: not_found_msg,
                 gate_verilog: String::new(),
                 top_module: top,
                 cell_counts: HashMap::new(),
                 wire_count: 0,
                 bit_count: 0,
                 public_wires: 0,
-                error: Some("Yosys binary not found in PATH".to_string()),
+                error: Some(format!("Yosys binary '{}' not found", yosys_bin)),
             })
         }
         Err(e) => {
@@ -616,7 +810,8 @@ pub fn run() {
             simulate,
             run_python,
             synthesize,
-            read_external_files
+            read_external_files,
+            check_toolchain
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -730,5 +925,22 @@ endmodule
         assert_eq!(vf.name, "fifo.sv");
         assert_eq!(vf.file_type, "systemverilog");
         assert_eq!(vf.content, content);
+    }
+
+    #[test]
+    fn test_check_toolchain_defaults() {
+        let health = check_toolchain(None).expect("toolchain check should succeed");
+        assert_eq!(health.iverilog.name, "Icarus Verilog");
+        assert_eq!(health.vvp.name, "VVP Runtime");
+        assert_eq!(health.verilator.name, "Verilator");
+        assert_eq!(health.yosys.name, "Yosys Synthesis");
+        assert_eq!(health.python.name, "Python 3");
+    }
+
+    #[test]
+    fn test_resolve_tool_nonexistent() {
+        let status = resolve_tool("FakeTool", "definitely_nonexistent_binary_xyz_123", None, "--version");
+        assert!(!status.found);
+        assert!(status.error.is_some());
     }
 }

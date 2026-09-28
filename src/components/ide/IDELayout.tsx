@@ -10,6 +10,7 @@ import { WaveformViewer } from './WaveformViewer';
 import { AIAssistStudio } from './AIAssistStudio';
 import { StatusBar } from './StatusBar';
 import { WelcomeScreen } from './WelcomeScreen';
+import { ToolchainModal } from './ToolchainModal';
 import { useIDEStore } from '@/store/ide-store';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,7 @@ export function IDELayout() {
           <WelcomeScreen />
         </div>
         <StatusBar />
+        <ToolchainModal />
       </div>
     );
   }
@@ -165,6 +167,7 @@ export function IDELayout() {
 
       {/* Global Status Bar */}
       <StatusBar />
+      <ToolchainModal />
     </div>
   );
 }

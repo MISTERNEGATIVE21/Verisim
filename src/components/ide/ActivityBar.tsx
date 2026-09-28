@@ -1,7 +1,7 @@
 'use client';
 
 import { useIDEStore, ActivityTab } from '@/store/ide-store';
-import { Files, Zap, Activity, Sparkles } from 'lucide-react';
+import { Files, Zap, Activity, Sparkles, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -31,6 +31,8 @@ export function ActivityBar() {
     setDockCollapsed,
     synthesisResult,
     isSynthesizing,
+    toolchainHealth,
+    setIsToolchainModalOpen,
   } = useIDEStore();
 
   const handleTabClick = (tabId: ActivityTab) => {
@@ -105,6 +107,33 @@ export function ActivityBar() {
             </div>
           );
         })}
+      </div>
+
+      {/* Bottom EDA Toolchain Settings Button */}
+      <div className="flex flex-col items-center gap-1.5 w-full">
+        <div className="relative group w-full flex justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsToolchainModalOpen(true)}
+            className="h-10 w-10 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all relative"
+            title="EDA Toolchain & Compilation Settings"
+          >
+            <Settings className="h-5 w-5 transition-transform group-hover:rotate-45 duration-300" />
+            
+            {/* Status dot */}
+            {toolchainHealth && (
+              <span
+                className={cn(
+                  "absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-card",
+                  toolchainHealth.verilator.found && toolchainHealth.iverilog.found && toolchainHealth.yosys.found
+                    ? "bg-emerald-500"
+                    : "bg-amber-500"
+                )}
+              />
+            )}
+          </Button>
+        </div>
       </div>
     </aside>
   );

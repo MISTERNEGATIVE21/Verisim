@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useIDEStore } from '@/store/ide-store';
-import { Sparkles, Terminal, Cpu, Layers } from 'lucide-react';
+import { checkToolchainHealth } from '@/lib/tauri-db';
+import { Sparkles, Terminal, Cpu, Layers, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function StatusBar() {
@@ -13,8 +15,20 @@ export function StatusBar() {
     toggleAiAssist,
     activeFile,
     isSimulating,
-    isPythonRunning
+    isPythonRunning,
+    toolchainHealth,
+    setToolchainHealth,
+    toolchainConfig,
+    setIsToolchainModalOpen,
   } = useIDEStore();
+
+  useEffect(() => {
+    if (!toolchainHealth) {
+      checkToolchainHealth(toolchainConfig)
+        .then(setToolchainHealth)
+        .catch((e) => console.warn('StatusBar health check failed:', e));
+    }
+  }, [toolchainHealth, toolchainConfig, setToolchainHealth]);
 
   const getFileBadge = () => {
     if (!activeFile) return 'No file';
@@ -23,27 +37,73 @@ export function StatusBar() {
     return 'Verilog-2001 (IEEE 1364)';
   };
 
+  const getHdlStatusLabel = () => {
+    if (selectedEngine === 'verilator') {
+      if (toolchainHealth?.verilator.found) {
+        return toolchainHealth.verilator.version.split('\n')[0].replace('Verilator ', 'Verilator ');
+      }
+      return 'Verilator (Missing)';
+    }
+    if (toolchainHealth?.iverilog.found) {
+      return 'Icarus 13.0 (-g2012)';
+    }
+    return 'Icarus Verilog';
+  };
+
   return (
     <footer className="h-6 bg-card border-t border-border px-3 flex items-center justify-between text-[11px] text-muted-foreground select-none z-20">
       {/* Left items */}
       <div className="flex items-center gap-3">
-        {/* Engine status */}
-        <div className="flex items-center gap-1.5 hover:text-foreground transition-colors">
-          <Cpu className="h-3 w-3 text-blue-400" />
+        {/* Engine status (clickable to open toolchain settings) */}
+        <button
+          onClick={() => setIsToolchainModalOpen(true)}
+          className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+          title="Click to view & configure EDA Toolchain"
+        >
+          <Cpu className={cn(
+            "h-3 w-3",
+            toolchainHealth?.iverilog.found || toolchainHealth?.verilator.found ? "text-blue-400" : "text-amber-400"
+          )} />
           <span>
             HDL: <strong className="text-foreground font-medium">
-              {selectedEngine === 'verilator' ? 'Verilator 5.052' : 'Icarus 13.0 (-g2012)'}
+              {getHdlStatusLabel()}
             </strong>
           </span>
-        </div>
+        </button>
+
+        <span className="text-border/60">|</span>
+
+        {/* Yosys Synthesis status */}
+        <button
+          onClick={() => setIsToolchainModalOpen(true)}
+          className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+          title="Click to configure Yosys Synthesis Engine"
+        >
+          <Zap className={cn("h-3 w-3", toolchainHealth?.yosys.found ? "text-amber-400" : "text-muted-foreground/60")} />
+          <span>
+            Yosys:{' '}
+            <strong className={cn("font-medium", toolchainHealth?.yosys.found ? "text-emerald-400" : "text-amber-400")}>
+              {toolchainHealth?.yosys.found ? 'Ready' : 'Not Configured'}
+            </strong>
+          </span>
+        </button>
 
         <span className="text-border/60">|</span>
 
         {/* Python status */}
-        <div className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+        <button
+          onClick={() => setIsToolchainModalOpen(true)}
+          className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+          title="Click to configure Python Runtime"
+        >
           <span className="text-[10px]">🐍</span>
-          <span>Python: <strong className="text-foreground font-medium">3.14 (Verified)</strong></span>
-        </div>
+          <span>
+            Python:{' '}
+            <strong className="text-foreground font-medium">
+              {toolchainHealth?.python.found ? 'Ready (3.14)' : 'Not Found'}
+            </strong>
+          </span>
+        </button>
 
         {/* Active execution indicator */}
         {isSimulating && (

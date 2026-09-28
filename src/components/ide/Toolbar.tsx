@@ -115,6 +115,7 @@ export function Toolbar() {
     sidebarCollapsed,
     setSidebarCollapsed,
     activeFile,
+    setIsToolchainModalOpen,
   } = useIDEStore();
   
   const { isNewProjectDialogOpen, setIsNewProjectDialogOpen } = useIDEStore();
@@ -415,6 +416,16 @@ export function Toolbar() {
           </SelectContent>
         </Select>
 
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+          onClick={() => setIsToolchainModalOpen(true)}
+          title="Configure EDA Toolchains & Compilers"
+        >
+          <Settings2 className="h-3.5 w-3.5 text-muted-foreground hover:text-blue-400 transition-colors" />
+        </Button>
+
         {/* Simulate Button */}
         <Button
           size="sm"
@@ -540,6 +551,14 @@ export function Toolbar() {
             >
               Inline Auto-Suggestions
             </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator className="bg-border/40" />
+            <DropdownMenuItem
+              onClick={() => setIsToolchainModalOpen(true)}
+              className="flex items-center gap-2 cursor-pointer text-xs"
+            >
+              <Cpu className="h-3.5 w-3.5 text-blue-400" />
+              <span>EDA Toolchains & Paths...</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

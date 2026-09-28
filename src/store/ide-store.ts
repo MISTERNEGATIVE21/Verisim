@@ -51,7 +51,58 @@ export interface SynthesisResult {
   error?: string;
 }
 
+export interface ToolchainConfig {
+  use_custom_paths: boolean;
+  iverilog_path?: string;
+  vvp_path?: string;
+  verilator_path?: string;
+  yosys_path?: string;
+  python_path?: string;
+}
+
+export interface ToolStatus {
+  name: string;
+  found: boolean;
+  resolved_path: string;
+  version: string;
+  error?: string;
+}
+
+export interface ToolchainHealth {
+  iverilog: ToolStatus;
+  vvp: ToolStatus;
+  verilator: ToolStatus;
+  yosys: ToolStatus;
+  python: ToolStatus;
+}
+
+const defaultToolchainConfig: ToolchainConfig = {
+  use_custom_paths: false,
+};
+
+const getInitialToolchainConfig = (): ToolchainConfig => {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('verisim_toolchain_config');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Failed to parse stored toolchain config:', e);
+    }
+  }
+  return defaultToolchainConfig;
+};
+
 interface IDEState {
+  // Toolchain & Configuration
+  toolchainConfig: ToolchainConfig;
+  setToolchainConfig: (config: ToolchainConfig | ((prev: ToolchainConfig) => ToolchainConfig)) => void;
+  toolchainHealth: ToolchainHealth | null;
+  setToolchainHealth: (health: ToolchainHealth | null) => void;
+  isToolchainModalOpen: boolean;
+  setIsToolchainModalOpen: (open: boolean) => void;
+
   // Projects
   projects: Project[];
   setProjects: (projects: Project[]) => void;
@@ -125,6 +176,24 @@ interface IDEState {
 }
 
 export const useIDEStore = create<IDEState>((set, get) => ({
+  // Toolchain & Configuration
+  toolchainConfig: getInitialToolchainConfig(),
+  setToolchainConfig: (config) => {
+    const nextConfig = typeof config === 'function' ? config(get().toolchainConfig) : config;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('verisim_toolchain_config', JSON.stringify(nextConfig));
+      } catch (e) {
+        console.warn('Failed to persist toolchain config:', e);
+      }
+    }
+    set({ toolchainConfig: nextConfig });
+  },
+  toolchainHealth: null,
+  setToolchainHealth: (health) => set({ toolchainHealth: health }),
+  isToolchainModalOpen: false,
+  setIsToolchainModalOpen: (open) => set({ isToolchainModalOpen: open }),
+
   // Projects
   projects: [],
   setProjects: (projects) => set({ projects }),

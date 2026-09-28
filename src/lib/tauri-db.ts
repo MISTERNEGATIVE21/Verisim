@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { useIDEStore } from '../store/ide-store';
+import { useIDEStore, type ToolchainConfig, type ToolchainHealth } from '../store/ide-store';
 
 export function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -160,9 +160,22 @@ export function createNewProject(name: string, description: string = '', templat
   return project;
 }
 
+export async function checkToolchainHealth(config?: ToolchainConfig): Promise<ToolchainHealth> {
+  console.log('TauriDB: checkToolchainHealth called', config);
+  try {
+    const result = await invoke<ToolchainHealth>('check_toolchain', { config: config || null });
+    console.log('TauriDB: checkToolchainHealth result', result);
+    return result;
+  } catch (error) {
+    console.error('TauriDB: checkToolchainHealth error:', error);
+    throw error;
+  }
+}
+
 export async function runSimulation(projectId: string, files: any[], engine: string = 'iverilog') {
   console.log('TauriDB: runSimulation called', { projectId, engine });
   try {
+    const toolchain = useIDEStore.getState().toolchainConfig;
     const backendFiles = files.map(f => ({
         id: f.id,
         name: f.name,
@@ -170,7 +183,7 @@ export async function runSimulation(projectId: string, files: any[], engine: str
         type: f.type,
         project_id: f.project_id || projectId
     }));
-    const result = await invoke('simulate', { engine, files: backendFiles });
+    const result = await invoke('simulate', { engine, files: backendFiles, toolchain });
     console.log('TauriDB: runSimulation success', result);
     return result;
   } catch (error) {
@@ -185,6 +198,7 @@ export async function runSimulation(projectId: string, files: any[], engine: str
 export async function runPythonScript(scriptName: string, files: any[], args: string[] = []) {
   console.log('TauriDB: runPythonScript called', { scriptName });
   try {
+    const toolchain = useIDEStore.getState().toolchainConfig;
     const backendFiles = files.map(f => ({
         id: f.id,
         name: f.name,
@@ -192,7 +206,7 @@ export async function runPythonScript(scriptName: string, files: any[], args: st
         type: f.type,
         project_id: f.project_id || 'default'
     }));
-    const result = await invoke<any>('run_python', { scriptName, files: backendFiles, args });
+    const result = await invoke<any>('run_python', { scriptName, files: backendFiles, args, toolchain });
     console.log('TauriDB: runPythonScript success', result);
     return result;
   } catch (error) {
@@ -208,6 +222,7 @@ export async function runPythonScript(scriptName: string, files: any[], args: st
 export async function synthesizeRTL(files: any[], topModule?: string) {
   console.log('TauriDB: synthesizeRTL called', { topModule });
   try {
+    const toolchain = useIDEStore.getState().toolchainConfig;
     const backendFiles = files.map(f => ({
       id: f.id,
       name: f.name,
@@ -215,7 +230,7 @@ export async function synthesizeRTL(files: any[], topModule?: string) {
       type: f.type,
       project_id: f.project_id || 'default'
     }));
-    const result = await invoke<any>('synthesize', { files: backendFiles, topModule: topModule || null });
+    const result = await invoke<any>('synthesize', { files: backendFiles, topModule: topModule || null, toolchain });
     console.log('TauriDB: synthesizeRTL success', result);
     return result;
   } catch (error) {

@@ -18,7 +18,8 @@ import {
   Info,
   Loader2,
   RefreshCw,
-  Binary
+  Binary,
+  Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -64,6 +65,7 @@ export function SynthesisViewer({ variant = 'dock' }: SynthesisViewerProps) {
     setSynthesizing,
     setActiveDockTab,
     setDockCollapsed,
+    setIsToolchainModalOpen,
   } = useIDEStore();
 
   const [activeSubTab, setActiveSubTab] = useState<'gates' | 'netlist' | 'log'>('gates');
@@ -269,6 +271,18 @@ export function SynthesisViewer({ variant = 'dock' }: SynthesisViewerProps) {
                       className="h-6 px-2 text-xs"
                     >
                       {copiedInstallCmd ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsToolchainModalOpen(true)}
+                      className="h-7 text-xs gap-1.5 border-border/80 text-foreground hover:bg-muted"
+                    >
+                      <Settings className="h-3.5 w-3.5 text-blue-400" />
+                      Configure EDA Toolchain Paths
                     </Button>
                   </div>
                 </div>
