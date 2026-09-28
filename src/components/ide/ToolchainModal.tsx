@@ -30,6 +30,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface ToolItemProps {
   name: string;
@@ -57,6 +58,7 @@ function ToolCard({
   installHint,
 }: ToolItemProps) {
   const isFound = status?.found ?? false;
+  const isBundled = status?.resolved_path?.startsWith('(Bundled)') ?? false;
 
   return (
     <div className="p-3.5 rounded-lg border border-border/70 bg-card/60 hover:bg-card/90 transition-all flex flex-col gap-2.5">
@@ -80,9 +82,17 @@ function ToolCard({
         <div>
           {status ? (
             isFound ? (
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 text-xs py-0.5 px-2 flex items-center gap-1.5 font-medium">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-xs py-0.5 px-2 flex items-center gap-1.5 font-medium",
+                  isBundled
+                    ? "bg-violet-500/15 text-violet-400 border-violet-500/30"
+                    : "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                )}
+              >
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Ready</span>
+                <span>{isBundled ? 'Bundled (Self-Contained)' : 'Ready'}</span>
               </Badge>
             ) : (
               <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-xs py-0.5 px-2 flex items-center gap-1.5 font-medium">
@@ -105,7 +115,12 @@ function ToolCard({
             <>
               <div className="flex items-center justify-between text-foreground">
                 <span className="truncate">{status.version}</span>
-                <span className="text-[10px] text-emerald-500 font-semibold uppercase tracking-wider">OK</span>
+                <span className={cn(
+                  "text-[10px] font-semibold uppercase tracking-wider",
+                  isBundled ? "text-violet-400" : "text-emerald-500"
+                )}>
+                  {isBundled ? 'BUNDLED' : 'SYSTEM OK'}
+                </span>
               </div>
               <div className="text-muted-foreground/80 truncate text-[10px]">
                 Path: {status.resolved_path}
@@ -284,13 +299,18 @@ export function ToolchainModal() {
         {/* Global Strategy Mode Switch */}
         <div className="p-3 rounded-lg border border-border/70 bg-muted/20 flex items-center justify-between gap-4">
           <div>
-            <div className="text-xs font-semibold text-foreground">
-              {useCustomPaths ? 'Custom Executable Paths' : 'Automatic System Detection (Recommended)'}
+            <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <span>{useCustomPaths ? 'Custom Executable Paths' : 'Bundled Verisim EDA Suite (Zero Host Dependencies)'}</span>
+              {!useCustomPaths && (
+                <Badge variant="outline" className="bg-violet-500/15 text-violet-400 border-violet-500/30 text-[10px] py-0 px-1.5">
+                  Pre-Packaged
+                </Badge>
+              )}
             </div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-[11px] text-muted-foreground mt-0.5">
               {useCustomPaths
                 ? 'Specify custom binary paths for tools installed in non-standard locations (e.g. /home/mister/Xilinx or ~/tools).'
-                : 'Automatically discovers and executes binaries from your system PATH (/usr/bin, /usr/local/bin).'}
+                : 'Runs Verisim\'s internal pre-packaged EDA toolchain (Icarus, VVP, Verilator, Yosys, ABC). Works completely self-contained out-of-the-box on any Linux machine without requiring host packages!'}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

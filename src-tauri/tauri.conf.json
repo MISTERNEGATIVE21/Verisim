@@ -26,6 +26,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": {
+      "toolchain/": "toolchain"
+    },
     "publisher": "MISTERNEGATIVE21",
     "targets": [
       "deb",

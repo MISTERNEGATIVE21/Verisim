@@ -46,3 +46,5 @@ Thumbs.db
 *.vvp
 simulation.vvp
 dump.vcd
+*.history
+*.tsbuildinfo

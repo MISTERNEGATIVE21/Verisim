@@ -2,8 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VerilogFile {
@@ -83,24 +85,137 @@ pub struct ToolchainHealth {
     pub python: ToolStatus,
 }
 
+pub fn find_bundled_toolchain_dir(app_handle: Option<&tauri::AppHandle>) -> Option<PathBuf> {
+    // 1. Check via app_handle resource_dir if available (Tauri v2 standard)
+    if let Some(handle) = app_handle {
+        if let Ok(res_dir) = handle.path().resource_dir() {
+            let candidate = res_dir.join("toolchain");
+            if candidate.join("bin").exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 2. Check APPDIR (AppImage environment)
+    if let Ok(appdir) = std::env::var("APPDIR") {
+        let candidates = [
+            Path::new(&appdir).join("usr/lib/verisim-ide/toolchain"),
+            Path::new(&appdir).join("usr/lib/toolchain"),
+            Path::new(&appdir).join("toolchain"),
+        ];
+        for c in &candidates {
+            if c.join("bin").exists() {
+                return Some(c.clone());
+            }
+        }
+    }
+
+    // 3. Check relative to current_exe
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let candidates = [
+                parent.join("toolchain"),
+                parent.join("../lib/verisim-ide/toolchain"),
+                parent.join("../../usr/lib/verisim-ide/toolchain"),
+            ];
+            for c in &candidates {
+                if c.join("bin").exists() {
+                    return Some(c.clone());
+                }
+            }
+        }
+    }
+
+    // 4. Check relative to current_dir / workspace
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidates = [
+            cwd.join("src-tauri/toolchain"),
+            cwd.join("toolchain"),
+            cwd.join("../src-tauri/toolchain"),
+        ];
+        for c in &candidates {
+            if c.join("bin").exists() {
+                return Some(c.clone());
+            }
+        }
+    }
+
+    None
+}
+
+pub fn configure_tool_cmd(
+    cmd: &mut Command,
+    bundled_dir: Option<&Path>,
+) {
+    if let Some(tc_dir) = bundled_dir {
+        let bin_dir = tc_dir.join("bin");
+        let lib_dir = tc_dir.join("lib");
+        let share_yosys = tc_dir.join("share/yosys");
+        let share_verilator = tc_dir.join("share/verilator");
+
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = format!("{}:{}", bin_dir.display(), current_path);
+        cmd.env("PATH", new_path);
+
+        let current_ld = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+        let new_ld = if current_ld.is_empty() {
+            format!("{}", lib_dir.display())
+        } else {
+            format!("{}:{}", lib_dir.display(), current_ld)
+        };
+        cmd.env("LD_LIBRARY_PATH", new_ld);
+
+        cmd.env("YOSYS_DATDIR", share_yosys);
+        cmd.env("VERILATOR_ROOT", share_verilator);
+    }
+}
+
+pub fn resolve_tool_binary(
+    _name: &str,
+    default_bin: &str,
+    custom_path: Option<&str>,
+    bundled_dir: Option<&Path>,
+) -> String {
+    if let Some(p) = custom_path {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    if let Some(tc_dir) = bundled_dir {
+        let candidate = tc_dir.join("bin").join(default_bin);
+        if candidate.exists() {
+            return candidate.to_string_lossy().to_string();
+        }
+    }
+
+    default_bin.to_string()
+}
+
 pub fn resolve_tool(
     name: &str,
     default_bin: &str,
     custom_path: Option<&str>,
     version_arg: &str,
+    bundled_dir: Option<&Path>,
 ) -> ToolStatus {
-    let candidate = if let Some(p) = custom_path {
-        let trimmed = p.trim();
-        if !trimmed.is_empty() {
-            trimmed.to_string()
-        } else {
-            default_bin.to_string()
-        }
-    } else {
-        default_bin.to_string()
-    };
+    let candidate = resolve_tool_binary(name, default_bin, custom_path, bundled_dir);
+    let mut cmd = Command::new(&candidate);
+    cmd.arg(version_arg);
 
-    let res = Command::new(&candidate).arg(version_arg).output();
+    if default_bin == "iverilog" {
+        if let Some(tc_dir) = bundled_dir {
+            let ivl_lib = tc_dir.join("lib/ivl");
+            if ivl_lib.exists() {
+                cmd.arg("-B").arg(&ivl_lib);
+            }
+        }
+    }
+
+    configure_tool_cmd(&mut cmd, bundled_dir);
+
+    let res = cmd.output();
     match res {
         Ok(output) => {
             let out_str = String::from_utf8_lossy(&output.stdout).to_string();
@@ -114,7 +229,10 @@ pub fn resolve_tool(
                 .unwrap_or("Available")
                 .to_string();
 
-            let resolved_path = if candidate.contains('/') {
+            let is_bundled = bundled_dir.map_or(false, |d| candidate.starts_with(d.to_string_lossy().as_ref()));
+            let display_path = if is_bundled {
+                format!("(Bundled) {}", candidate)
+            } else if candidate.contains('/') {
                 candidate.clone()
             } else {
                 Command::new("which")
@@ -135,7 +253,7 @@ pub fn resolve_tool(
             ToolStatus {
                 name: name.to_string(),
                 found: true,
-                resolved_path,
+                resolved_path: display_path,
                 version: first_meaningful_line,
                 error: None,
             }
@@ -150,8 +268,10 @@ pub fn resolve_tool(
     }
 }
 
-#[tauri::command]
-fn check_toolchain(config: Option<ToolchainConfig>) -> Result<ToolchainHealth, String> {
+pub fn check_toolchain_internal(
+    bundled_dir: Option<&Path>,
+    config: Option<ToolchainConfig>,
+) -> Result<ToolchainHealth, String> {
     let cfg = config.unwrap_or_default();
     let use_custom = cfg.use_custom_paths;
 
@@ -160,30 +280,35 @@ fn check_toolchain(config: Option<ToolchainConfig>) -> Result<ToolchainHealth, S
         "iverilog",
         if use_custom { cfg.iverilog_path.as_deref() } else { None },
         "-V",
+        bundled_dir,
     );
     let vvp = resolve_tool(
         "VVP Runtime",
         "vvp",
         if use_custom { cfg.vvp_path.as_deref() } else { None },
         "-V",
+        bundled_dir,
     );
     let verilator = resolve_tool(
         "Verilator",
         "verilator",
         if use_custom { cfg.verilator_path.as_deref() } else { None },
         "--version",
+        bundled_dir,
     );
     let yosys = resolve_tool(
         "Yosys Synthesis",
         "yosys",
         if use_custom { cfg.yosys_path.as_deref() } else { None },
         "-V",
+        bundled_dir,
     );
     let python = resolve_tool(
         "Python 3",
         "python3",
         if use_custom { cfg.python_path.as_deref() } else { None },
         "--version",
+        bundled_dir,
     );
 
     Ok(ToolchainHealth {
@@ -193,6 +318,12 @@ fn check_toolchain(config: Option<ToolchainConfig>) -> Result<ToolchainHealth, S
         yosys,
         python,
     })
+}
+
+#[tauri::command]
+fn check_toolchain(app: tauri::AppHandle, config: Option<ToolchainConfig>) -> Result<ToolchainHealth, String> {
+    let bundled_dir = find_bundled_toolchain_dir(Some(&app));
+    check_toolchain_internal(bundled_dir.as_deref(), config)
 }
 
 pub fn detect_modules(content: &str) -> Vec<String> {
@@ -395,28 +526,33 @@ fn save_project(path: String, project: Project) -> Result<(), String> {
 
 #[tauri::command]
 async fn simulate(
+    app: tauri::AppHandle,
     engine: Option<String>,
     files: Vec<VerilogFile>,
     toolchain: Option<ToolchainConfig>,
 ) -> Result<SimulationResult, String> {
     let chosen_engine = engine.unwrap_or_else(|| "iverilog".to_string());
     let tc = toolchain.unwrap_or_default();
+    let bundled_dir = find_bundled_toolchain_dir(Some(&app));
 
-    let verilator_bin = if tc.use_custom_paths {
-        tc.verilator_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("verilator")
-    } else {
-        "verilator"
-    };
-    let iverilog_bin = if tc.use_custom_paths {
-        tc.iverilog_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("iverilog")
-    } else {
-        "iverilog"
-    };
-    let vvp_bin = if tc.use_custom_paths {
-        tc.vvp_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("vvp")
-    } else {
-        "vvp"
-    };
+    let verilator_bin = resolve_tool_binary(
+        "Verilator",
+        "verilator",
+        if tc.use_custom_paths { tc.verilator_path.as_deref() } else { None },
+        bundled_dir.as_deref(),
+    );
+    let iverilog_bin = resolve_tool_binary(
+        "Icarus Verilog",
+        "iverilog",
+        if tc.use_custom_paths { tc.iverilog_path.as_deref() } else { None },
+        bundled_dir.as_deref(),
+    );
+    let vvp_bin = resolve_tool_binary(
+        "VVP Runtime",
+        "vvp",
+        if tc.use_custom_paths { tc.vvp_path.as_deref() } else { None },
+        bundled_dir.as_deref(),
+    );
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -441,7 +577,7 @@ async fn simulate(
 
         // If testbench found: compile with verilator --binary --trace
         if let Some(top_tb) = testbench_module {
-            let mut verilator_cmd = Command::new(verilator_bin);
+            let mut verilator_cmd = Command::new(&verilator_bin);
             verilator_cmd
                 .arg("--binary")
                 .arg("--trace")
@@ -465,6 +601,7 @@ async fn simulate(
             }
 
             verilator_cmd.current_dir(&temp_dir);
+            configure_tool_cmd(&mut verilator_cmd, bundled_dir.as_deref());
 
             let compile_res = verilator_cmd.output().map_err(|e| format!("Failed to run verilator: {}", e))?;
             let stdout_comp = String::from_utf8_lossy(&compile_res.stdout).to_string();
@@ -483,9 +620,11 @@ async fn simulate(
             let bin_name = format!("V{}", top_tb);
             let bin_path = temp_dir.join("obj_dir").join(&bin_name);
 
-            let sim_res = Command::new(&bin_path)
-                .current_dir(&temp_dir)
-                .output();
+            let mut sim_cmd = Command::new(&bin_path);
+            sim_cmd.current_dir(&temp_dir);
+            configure_tool_cmd(&mut sim_cmd, bundled_dir.as_deref());
+
+            let sim_res = sim_cmd.output();
 
             let (sim_out, sim_success) = match sim_res {
                 Ok(output) => {
@@ -524,7 +663,7 @@ async fn simulate(
         }
 
         // Fallback: lint-only if no testbench
-        let mut verilator_cmd = Command::new(verilator_bin);
+        let mut verilator_cmd = Command::new(&verilator_bin);
         verilator_cmd.arg("--lint-only").arg("-Wall").arg("-Wno-fatal");
         if has_sv {
             verilator_cmd.arg("--sv");
@@ -534,6 +673,8 @@ async fn simulate(
                 verilator_cmd.arg(temp_dir.join(&file.name));
             }
         }
+        configure_tool_cmd(&mut verilator_cmd, bundled_dir.as_deref());
+
         let output = verilator_cmd.output().map_err(|e| format!("Failed to run verilator: {}", e))?;
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -553,9 +694,15 @@ async fn simulate(
 
     // Default or both: iverilog simulation
     let vvp_file = temp_dir.join("simulation.vvp");
-    let mut compile_cmd = Command::new(iverilog_bin);
+    let mut compile_cmd = Command::new(&iverilog_bin);
     if has_sv {
         compile_cmd.arg("-g2012");
+    }
+    if let Some(tc_dir) = &bundled_dir {
+        let ivl_lib = tc_dir.join("lib/ivl");
+        if ivl_lib.exists() {
+            compile_cmd.arg("-B").arg(&ivl_lib);
+        }
     }
     compile_cmd.arg("-o").arg(&vvp_file);
     for file in &files {
@@ -563,6 +710,7 @@ async fn simulate(
             compile_cmd.arg(temp_dir.join(&file.name));
         }
     }
+    configure_tool_cmd(&mut compile_cmd, bundled_dir.as_deref());
 
     let compile_output = compile_cmd.output().map_err(|e| format!("Failed to run iverilog: {}", e))?;
     
@@ -576,9 +724,10 @@ async fn simulate(
         });
     }
 
-    let mut run_cmd = Command::new(vvp_bin);
+    let mut run_cmd = Command::new(&vvp_bin);
     run_cmd.arg(&vvp_file);
     run_cmd.current_dir(&temp_dir);
+    configure_tool_cmd(&mut run_cmd, bundled_dir.as_deref());
 
     let run_output = run_cmd.output().map_err(|e| format!("Failed to run vvp: {}", e))?;
     let stdout = String::from_utf8_lossy(&run_output.stdout).to_string();
@@ -608,17 +757,20 @@ async fn simulate(
 
 #[tauri::command]
 async fn run_python(
+    app: tauri::AppHandle,
     script_name: String,
     files: Vec<VerilogFile>,
     args: Vec<String>,
     toolchain: Option<ToolchainConfig>,
 ) -> Result<PythonResult, String> {
     let tc = toolchain.unwrap_or_default();
-    let python_bin = if tc.use_custom_paths {
-        tc.python_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("python3")
-    } else {
-        "python3"
-    };
+    let bundled_dir = find_bundled_toolchain_dir(Some(&app));
+    let python_bin = resolve_tool_binary(
+        "Python 3",
+        "python3",
+        if tc.use_custom_paths { tc.python_path.as_deref() } else { None },
+        bundled_dir.as_deref(),
+    );
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -634,12 +786,13 @@ async fn run_python(
     }
 
     let script_path = temp_dir.join(&script_name);
-    let mut cmd = Command::new(python_bin);
+    let mut cmd = Command::new(&python_bin);
     cmd.arg(&script_path);
     for arg in args {
         cmd.arg(arg);
     }
     cmd.current_dir(&temp_dir);
+    configure_tool_cmd(&mut cmd, bundled_dir.as_deref());
 
     let output = cmd.output().map_err(|e| format!("Failed to run python3: {}", e))?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -663,15 +816,29 @@ async fn run_python(
 
 #[tauri::command]
 async fn synthesize(
+    app: tauri::AppHandle,
     files: Vec<VerilogFile>,
     top_module: Option<String>,
     toolchain: Option<ToolchainConfig>,
 ) -> Result<SynthesisResult, String> {
     let tc = toolchain.unwrap_or_default();
-    let yosys_bin = if tc.use_custom_paths {
-        tc.yosys_path.as_deref().filter(|p| !p.trim().is_empty()).unwrap_or("yosys")
+    let bundled_dir = find_bundled_toolchain_dir(Some(&app));
+    let yosys_bin = resolve_tool_binary(
+        "Yosys Synthesis",
+        "yosys",
+        if tc.use_custom_paths { tc.yosys_path.as_deref() } else { None },
+        bundled_dir.as_deref(),
+    );
+
+    let abc_cmd_part = if let Some(tc_dir) = &bundled_dir {
+        let abc_bin = tc_dir.join("bin/abc");
+        if abc_bin.exists() {
+            format!("abc -exe {} -g AND,NAND,OR,NOR,XOR,XNOR", abc_bin.display())
+        } else {
+            "abc -g AND,NAND,OR,NOR,XOR,XNOR".to_string()
+        }
     } else {
-        "yosys"
+        "abc -g AND,NAND,OR,NOR,XOR,XNOR".to_string()
     };
 
     let now = SystemTime::now()
@@ -709,15 +876,18 @@ async fn synthesize(
     // Construct yosys command script
     let read_cmd = format!("read_verilog -sv {}", file_names.join(" "));
     let yosys_script = format!(
-        "{}; hierarchy -check -top {}; proc; opt; fsm; opt; memory; opt; techmap; opt; abc -g AND,NAND,OR,NOR,XOR,XNOR; opt; clean; stat; write_verilog -noattr synth_gates.v",
-        read_cmd, top
+        "{}; hierarchy -check -top {}; proc; opt; fsm; opt; memory; opt; techmap; opt; {}; opt; clean; stat; write_verilog -noattr synth_gates.v",
+        read_cmd, top, abc_cmd_part
     );
 
-    let run_res = Command::new(yosys_bin)
+    let mut run_cmd = Command::new(&yosys_bin);
+    run_cmd
         .arg("-p")
         .arg(&yosys_script)
-        .current_dir(&temp_dir)
-        .output();
+        .current_dir(&temp_dir);
+    configure_tool_cmd(&mut run_cmd, bundled_dir.as_deref());
+
+    let run_res = run_cmd.output();
 
     match run_res {
         Ok(output) => {
@@ -929,17 +1099,24 @@ endmodule
 
     #[test]
     fn test_check_toolchain_defaults() {
-        let health = check_toolchain(None).expect("toolchain check should succeed");
+        let bundled = find_bundled_toolchain_dir(None);
+        let health = check_toolchain_internal(bundled.as_deref(), None).expect("toolchain check should succeed");
         assert_eq!(health.iverilog.name, "Icarus Verilog");
         assert_eq!(health.vvp.name, "VVP Runtime");
         assert_eq!(health.verilator.name, "Verilator");
         assert_eq!(health.yosys.name, "Yosys Synthesis");
         assert_eq!(health.python.name, "Python 3");
+
+        // Verify that bundled tools were found
+        assert!(health.yosys.found, "Yosys should be found in bundled toolchain");
+        assert!(health.verilator.found, "Verilator should be found in bundled toolchain");
+        assert!(health.iverilog.found, "Icarus Verilog should be found in bundled toolchain");
+        assert!(health.vvp.found, "VVP should be found in bundled toolchain");
     }
 
     #[test]
     fn test_resolve_tool_nonexistent() {
-        let status = resolve_tool("FakeTool", "definitely_nonexistent_binary_xyz_123", None, "--version");
+        let status = resolve_tool("FakeTool", "definitely_nonexistent_binary_xyz_123", None, "--version", None);
         assert!(!status.found);
         assert!(status.error.is_some());
     }
