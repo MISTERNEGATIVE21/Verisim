@@ -87,8 +87,8 @@ export function createNewProject(name: string, description: string, template: st
   return project;
 }
 
-export async function runSimulation(projectId: string, files: any[]) {
-  console.log('TauriDB: runSimulation called', { projectId });
+export async function runSimulation(projectId: string, files: any[], engine: string = 'iverilog') {
+  console.log('TauriDB: runSimulation called', { projectId, engine });
   try {
     const backendFiles = files.map(f => ({
         id: f.id,
@@ -97,7 +97,7 @@ export async function runSimulation(projectId: string, files: any[]) {
         type: f.type,
         project_id: f.project_id || projectId
     }));
-    const result = await invoke('simulate', { files: backendFiles });
+    const result = await invoke('simulate', { engine, files: backendFiles });
     console.log('TauriDB: runSimulation success', result);
     return result;
   } catch (error) {
@@ -105,6 +105,29 @@ export async function runSimulation(projectId: string, files: any[]) {
     return {
       success: false,
       output: `Simulation failed: ${error}`,
+    };
+  }
+}
+
+export async function runPythonScript(scriptName: string, files: any[], args: string[] = []) {
+  console.log('TauriDB: runPythonScript called', { scriptName });
+  try {
+    const backendFiles = files.map(f => ({
+        id: f.id,
+        name: f.name,
+        content: f.content,
+        type: f.type,
+        project_id: f.project_id || 'default'
+    }));
+    const result = await invoke<any>('run_python', { scriptName, files: backendFiles, args });
+    console.log('TauriDB: runPythonScript success', result);
+    return result;
+  } catch (error) {
+    console.error('TauriDB: runPythonScript error:', error);
+    return {
+      success: false,
+      output: `Python execution failed: ${error}`,
+      exit_code: -1
     };
   }
 }
