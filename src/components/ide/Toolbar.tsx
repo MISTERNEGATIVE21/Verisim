@@ -45,7 +45,8 @@ import {
   FolderOpen,
   Sparkles,
   Settings2,
-  Menu
+  Menu,
+  Upload
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useState, useEffect, useCallback } from 'react';
@@ -57,7 +58,8 @@ import {
   openProjectFile,
   runSimulation as tauriRunSimulation,
   runPythonScript,
-  synthesizeRTL
+  synthesizeRTL,
+  importVerilogFiles
 } from '@/lib/tauri-db';
 
 const PROJECT_TEMPLATES = [
@@ -146,6 +148,18 @@ export function Toolbar() {
     } catch (error) {
       console.error('Failed to open project:', error);
       toast.error('Failed to open project file');
+    }
+  };
+
+  const handleImportVerilog = async () => {
+    try {
+      const res = await importVerilogFiles();
+      if (res) {
+        toast.success('Loaded files into workspace');
+      }
+    } catch (error) {
+      console.error('Failed to import files:', error);
+      toast.error('Failed to import files');
     }
   };
 
@@ -351,10 +365,21 @@ export function Toolbar() {
             size="sm" 
             className="h-7 px-2 text-xs shrink-0 border-border/60"
             onClick={handleOpenProject}
-            title="Open Project (.vsm)"
+            title="Open Verilog (.v, .sv) or Project (.vsm)"
           >
             <FolderOpen className="h-3.5 w-3.5 mr-1" />
             <span className="hidden sm:inline">Open</span>
+          </Button>
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-7 px-2 text-xs shrink-0 border-border/60"
+            onClick={handleImportVerilog}
+            title="Import / Load Verilog & SystemVerilog files (.v, .sv, .py)"
+          >
+            <Upload className="h-3.5 w-3.5 mr-1 text-blue-400" />
+            <span className="hidden sm:inline">Import</span>
           </Button>
 
           {currentProject && (

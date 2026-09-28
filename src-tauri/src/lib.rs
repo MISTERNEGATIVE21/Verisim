@@ -138,11 +138,111 @@ pub fn parse_yosys_stat(output: &str) -> (HashMap<String, usize>, usize, usize, 
     (cell_counts, wire_count, bit_count, public_wires)
 }
 
+pub fn project_from_verilog_file(path: &str, content: &str) -> Project {
+    let p = std::path::Path::new(path);
+    let file_name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("module.v")
+        .to_string();
+
+    let is_sv = file_name.ends_with(".sv") || file_name.ends_with(".svh");
+    let is_tb = file_name.contains("_tb") || content.contains("$dumpfile");
+    let file_type = if is_tb {
+        "testbench"
+    } else if is_sv {
+        "systemverilog"
+    } else {
+        "verilog"
+    };
+
+    let proj_name = p
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Project")
+        .to_string();
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string();
+
+    Project {
+        id: format!("proj_{}", now),
+        name: proj_name,
+        description: Some(format!("Loaded from {}", file_name)),
+        files: vec![VerilogFile {
+            id: format!("file_{}", now),
+            name: file_name,
+            content: content.to_string(),
+            file_type: file_type.to_string(),
+            project_id: format!("proj_{}", now),
+        }],
+        created_at: now.clone(),
+        updated_at: now,
+    }
+}
+
+pub fn verilog_file_from_path(path: &str, content: &str, idx: usize) -> VerilogFile {
+    let p = std::path::Path::new(path);
+    let name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file.v")
+        .to_string();
+
+    let is_sv = name.ends_with(".sv") || name.ends_with(".svh");
+    let is_tb = name.contains("_tb") || content.contains("$dumpfile");
+    let is_py = name.ends_with(".py");
+    let is_mem = name.ends_with(".hex") || name.ends_with(".mem");
+
+    let file_type = if is_tb {
+        "testbench"
+    } else if is_py {
+        "python"
+    } else if is_mem {
+        "memory"
+    } else if is_sv {
+        "systemverilog"
+    } else {
+        "verilog"
+    };
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    VerilogFile {
+        id: format!("file_{}_{}", now, idx),
+        name,
+        content: content.to_string(),
+        file_type: file_type.to_string(),
+        project_id: "current".to_string(),
+    }
+}
+
 #[tauri::command]
 fn open_project(path: String) -> Result<Project, String> {
     let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
-    let project: Project = serde_json::from_str(&content).map_err(|e| format!("Failed to parse project file: {}", e))?;
-    Ok(project)
+    if path.ends_with(".vsm") {
+        let project: Project = serde_json::from_str(&content).map_err(|e| format!("Failed to parse project file: {}", e))?;
+        Ok(project)
+    } else {
+        // Automatically wrap .v, .sv, or other HDL file into a ready-to-simulate project
+        Ok(project_from_verilog_file(&path, &content))
+    }
+}
+
+#[tauri::command]
+fn read_external_files(paths: Vec<String>) -> Result<Vec<VerilogFile>, String> {
+    let mut files = Vec::new();
+    for (idx, path) in paths.iter().enumerate() {
+        let content = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path, e))?;
+        files.push(verilog_file_from_path(path, &content, idx));
+    }
+    Ok(files)
 }
 
 #[tauri::command]
@@ -515,7 +615,8 @@ pub fn run() {
             save_project,
             simulate,
             run_python,
-            synthesize
+            synthesize,
+            read_external_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -609,5 +710,25 @@ endmodule
         ];
         let tb = detect_testbench_module(&files);
         assert_eq!(tb, Some("testbench".to_string()));
+    }
+
+    #[test]
+    fn test_project_from_verilog_file() {
+        let content = "module counter(input clk); endmodule";
+        let proj = project_from_verilog_file("/tmp/counter.v", content);
+        assert_eq!(proj.name, "counter");
+        assert_eq!(proj.files.len(), 1);
+        assert_eq!(proj.files[0].name, "counter.v");
+        assert_eq!(proj.files[0].file_type, "verilog");
+        assert_eq!(proj.files[0].content, content);
+    }
+
+    #[test]
+    fn test_verilog_file_from_path_sv() {
+        let content = "module fifo_sync; endmodule";
+        let vf = verilog_file_from_path("/home/user/fifo.sv", content, 0);
+        assert_eq!(vf.name, "fifo.sv");
+        assert_eq!(vf.file_type, "systemverilog");
+        assert_eq!(vf.content, content);
     }
 }

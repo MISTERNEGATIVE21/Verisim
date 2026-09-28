@@ -6,8 +6,8 @@ export interface VerilogFile {
   content: string;
   type: string;
   project_id: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Project {

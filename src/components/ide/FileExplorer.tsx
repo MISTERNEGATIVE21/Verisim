@@ -14,10 +14,12 @@ import {
   Edit2, 
   File, 
   Database,
-  Sparkles
+  Sparkles,
+  Upload
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { importVerilogFiles } from '@/lib/tauri-db';
 import {
   Dialog,
   DialogContent,
@@ -249,6 +251,18 @@ endmodule`;
     }
   };
 
+  const handleImportFiles = async () => {
+    try {
+      const res = await importVerilogFiles();
+      if (res) {
+        toast.success('Loaded files into project');
+      }
+    } catch (error) {
+      console.error('Failed to import files:', error);
+      toast.error('Failed to import files');
+    }
+  };
+
   const files = currentProject.files || [];
   
   // Clean categorization
@@ -282,15 +296,26 @@ endmodule`;
         <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
           Project Files
         </span>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-6 w-6 text-muted-foreground hover:text-foreground" 
-          onClick={() => { setNewFileType('systemverilog'); setNewFileName(''); setNewFileOpen(true); }}
-          title="Create New File"
-        >
-          <FilePlus className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 text-muted-foreground hover:text-foreground" 
+            onClick={handleImportFiles}
+            title="Load / Import Verilog Files (.v, .sv, .py)"
+          >
+            <Upload className="h-3.5 w-3.5 text-blue-400" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 text-muted-foreground hover:text-foreground" 
+            onClick={() => { setNewFileType('systemverilog'); setNewFileName(''); setNewFileOpen(true); }}
+            title="Create New File"
+          >
+            <FilePlus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
       
       <ScrollArea className="flex-1">

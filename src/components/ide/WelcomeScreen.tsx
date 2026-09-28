@@ -1,8 +1,8 @@
 'use client';
 
-import { Cpu, FileCode, Plus, FolderOpen, ExternalLink, Github, Heart, BookOpen, Clock, Sparkles, Play } from 'lucide-react';
+import { Cpu, FileCode, Plus, FolderOpen, ExternalLink, Github, Heart, BookOpen, Clock, Sparkles, Play, Upload } from 'lucide-react';
 import { useIDEStore } from '@/store/ide-store';
-import { openProjectFile, createNewProject } from '@/lib/tauri-db';
+import { openProjectFile, createNewProject, importVerilogFiles } from '@/lib/tauri-db';
 import { toast } from 'sonner';
 import { open as openUrl } from '@tauri-apps/plugin-shell';
 
@@ -113,8 +113,19 @@ export function WelcomeScreen() {
           >
             <FolderOpen className="h-5 w-5 text-amber-400 shrink-0" />
             <div className="text-left">
-              <p className="text-sm font-medium text-foreground">Open Project</p>
-              <p className="text-xs text-muted-foreground">Load a .vsm workspace file from your filesystem</p>
+              <p className="text-sm font-medium text-foreground">Open Verilog or Project File</p>
+              <p className="text-xs text-muted-foreground">Load .v, .sv, or .vsm workspace files directly from your filesystem</p>
+            </div>
+          </div>
+
+          <div 
+            onClick={importVerilogFiles}
+            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-card hover:bg-muted/60 transition-colors cursor-pointer"
+          >
+            <Upload className="h-5 w-5 text-blue-400 shrink-0" />
+            <div className="text-left">
+              <p className="text-sm font-medium text-foreground">Import Verilog / SystemVerilog Files</p>
+              <p className="text-xs text-muted-foreground">Select multiple .v and .sv files to bundle into an instant project</p>
             </div>
           </div>
         </div>

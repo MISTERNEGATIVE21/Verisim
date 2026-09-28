@@ -11,17 +11,84 @@ export async function openProjectFile() {
   try {
     const selectedPath = await open({
       multiple: false,
-      filters: [{ name: 'Verisim Project', extensions: ['vsm'] }]
+      filters: [
+        { name: 'All Supported EDA Files (*.v, *.sv, *.vsm)', extensions: ['v', 'sv', 'svh', 'vsm'] },
+        { name: 'Verilog & SystemVerilog (*.v, *.sv)', extensions: ['v', 'sv', 'svh'] },
+        { name: 'Verisim Project (*.vsm)', extensions: ['vsm'] },
+        { name: 'All Files (*.*)', extensions: ['*'] }
+      ]
     });
 
     if (selectedPath && typeof selectedPath === 'string') {
       const project = await invoke<any>('open_project', { path: selectedPath });
       useIDEStore.getState().setCurrentProject(project, selectedPath);
+      if (project.files && project.files.length > 0) {
+        useIDEStore.getState().openFile(project.files[0]);
+      }
       return project;
     }
     return null;
   } catch (error) {
     console.error('TauriDB: openProjectFile error:', error);
+    throw error;
+  }
+}
+
+export async function importVerilogFiles() {
+  console.log('TauriDB: importVerilogFiles called');
+  try {
+    const selectedPaths = await open({
+      multiple: true,
+      filters: [
+        { name: 'HDL & Verification Files (*.v, *.sv, *.py)', extensions: ['v', 'sv', 'svh', 'py', 'hex', 'mem'] },
+        { name: 'Verilog & SystemVerilog (*.v, *.sv)', extensions: ['v', 'sv', 'svh'] },
+        { name: 'All Files (*.*)', extensions: ['*'] }
+      ]
+    });
+
+    if (!selectedPaths) return null;
+
+    const paths: string[] = Array.isArray(selectedPaths) ? selectedPaths : [selectedPaths];
+    if (paths.length === 0) return null;
+
+    const loadedFiles = await invoke<any[]>('read_external_files', { paths });
+    if (!loadedFiles || loadedFiles.length === 0) return null;
+
+    const { currentProject, setCurrentProject, setProjectFiles, openFile } = useIDEStore.getState();
+
+    if (!currentProject) {
+      const firstFileName = loadedFiles[0]?.name || 'Imported_Project';
+      const projName = firstFileName.replace(/\.[^/.]+$/, '');
+      const newProj = {
+        id: `proj_${Date.now()}`,
+        name: projName,
+        description: `Imported ${loadedFiles.length} file(s)`,
+        files: loadedFiles,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setCurrentProject(newProj, null);
+      openFile(loadedFiles[0]);
+      return newProj;
+    } else {
+      const existingFiles = currentProject.files || [];
+      const updatedFiles = [...existingFiles];
+
+      for (const newFile of loadedFiles) {
+        const existingIdx = updatedFiles.findIndex(f => f.name === newFile.name);
+        if (existingIdx >= 0) {
+          updatedFiles[existingIdx] = { ...newFile, id: updatedFiles[existingIdx].id };
+        } else {
+          updatedFiles.push(newFile);
+        }
+      }
+
+      setProjectFiles(updatedFiles);
+      openFile(loadedFiles[0]);
+      return currentProject;
+    }
+  } catch (error) {
+    console.error('TauriDB: importVerilogFiles error:', error);
     throw error;
   }
 }
