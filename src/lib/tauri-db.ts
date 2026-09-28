@@ -59,12 +59,18 @@ export async function saveProjectFile(isSaveAs = false) {
   }
 }
 
-export function createNewProject(name: string, description: string, template: string) {
+export function createNewProject(name: string, description: string = '', template: string = 'none') {
   console.log('TauriDB: createNewProject called', { name, description, template });
+  const cleanName = (name && name.trim()) ? name.trim() : 'Project';
   const projectId = generateId();
   const now = new Date().toISOString();
   
-  const files = getTemplateFiles(template).map(f => ({
+  const templateList = getTemplateFiles(template);
+  const sourceFiles = (Array.isArray(templateList) && templateList.length > 0) 
+    ? templateList 
+    : getTemplateFiles('none');
+
+  const files = sourceFiles.map(f => ({
     id: `${projectId}:${f.name}`,
     name: f.name,
     content: f.content,
@@ -76,7 +82,7 @@ export function createNewProject(name: string, description: string, template: st
 
   const project = {
     id: projectId,
-    name,
+    name: cleanName,
     description: description || null,
     files,
     created_at: now,
@@ -552,5 +558,6 @@ endmodule`,
       },
     ],
   };
-  return templates[template] || templates.basic;
+  const key = (template || 'none').toLowerCase().trim();
+  return templates[key] || templates[template] || templates.none || templates.basic;
 }

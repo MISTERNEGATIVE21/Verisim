@@ -1,6 +1,6 @@
 {
   "name": "verisim-ide",
-  "version": "2.0.0",
+  "version": "6.0.1",
   "description": "Verilog IDE with simulation and waveform viewing.",
   "author": "MISTERNEGATIVE21",
   "repository": {
@@ -17,7 +17,8 @@
     "desktop": "./src-tauri/target/release/app",
     "desktop:dev": "tauri dev",
     "build:appimage": "NO_STRIP=true tauri build --bundles appimage",
-    "appimage": "./src-tauri/target/release/bundle/appimage/verisim-ide_1.0.0_amd64.AppImage"
+    "appimage": "sh -c './src-tauri/target/release/bundle/appimage/verisim-ide_*.AppImage'",
+    "bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

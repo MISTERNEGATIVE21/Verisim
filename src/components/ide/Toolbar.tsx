@@ -237,16 +237,16 @@ export function Toolbar() {
   }, [sidebarCollapsed, activeFile, currentProject, isSimulating, saveProject, runSimulation, setIsNewProjectDialogOpen, setSidebarCollapsed]);
 
   const createProject = () => {
-    if (!newProjectName.trim()) return;
+    const targetName = newProjectName.trim() || PROJECT_TEMPLATES.find(t => t.id === selectedTemplate)?.name.replace(/[^a-zA-Z0-9_]/g, '_') || 'My_Project';
     
     try {
-      createNewProject(newProjectName, newProjectDesc, selectedTemplate);
+      createNewProject(targetName, newProjectDesc, selectedTemplate);
       setIsNewProjectDialogOpen(false);
       setNewProjectName('');
       setNewProjectDesc('');
       setSimulationResult(null);
       setPythonResult(null);
-      toast.success(`Created project "${newProjectName}"`);
+      toast.success(`Created project "${targetName}"`);
     } catch (error) {
       console.error('Failed to create project:', error);
       toast.error('Failed to create project. Please try again.');
