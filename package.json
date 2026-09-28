@@ -13,7 +13,9 @@
     "build": "next build",
     "start": "next start -p ${PORT:-3077}",
     "lint": "eslint .",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "desktop": "./src-tauri/target/release/app",
+    "desktop:dev": "tauri dev"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
