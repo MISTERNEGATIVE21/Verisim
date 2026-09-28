@@ -73,6 +73,30 @@ pub fn detect_modules(content: &str) -> Vec<String> {
     modules
 }
 
+pub fn detect_testbench_module(files: &[VerilogFile]) -> Option<String> {
+    // 1. First priority: look for a file containing $dumpfile and extract its module
+    for file in files {
+        if file.content.contains("$dumpfile") {
+            let mods = detect_modules(&file.content);
+            if let Some(m) = mods.first() {
+                return Some(m.clone());
+            }
+        }
+    }
+
+    // 2. Second priority: look for files or modules containing _tb suffix
+    for file in files {
+        let mods = detect_modules(&file.content);
+        for m in mods {
+            if file.name.contains("_tb") || m.ends_with("_tb") {
+                return Some(m);
+            }
+        }
+    }
+
+    None
+}
+
 pub fn parse_yosys_stat(output: &str) -> (HashMap<String, usize>, usize, usize, usize) {
     let mut cell_counts = HashMap::new();
     let mut wire_count = 0;
@@ -150,17 +174,7 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
 
     if chosen_engine == "verilator" {
         // Detect if there is a testbench module or $dumpfile in any file
-        let mut testbench_module: Option<String> = None;
-
-        for file in &files {
-            let mods = detect_modules(&file.content);
-            for m in mods {
-                if file.name.contains("_tb") || m.ends_with("_tb") {
-                    testbench_module = Some(m);
-                    break;
-                }
-            }
-        }
+        let testbench_module = detect_testbench_module(&files);
 
         // If testbench found: compile with verilator --binary --trace
         if let Some(top_tb) = testbench_module {
@@ -551,5 +565,49 @@ endmodule
 "#;
         let mods = detect_modules(verilog);
         assert_eq!(mods, vec!["fifo_sync", "fifo_tb"]);
+    }
+
+    #[test]
+    fn test_detect_testbench_module_dumpfile() {
+        let files = vec![
+            VerilogFile {
+                id: "1".into(),
+                name: "sim.sv".into(),
+                content: "module sim_runner;\n initial begin $dumpfile(\"test.vcd\"); end\nendmodule".into(),
+                file_type: "verilog".into(),
+                project_id: "p".into(),
+            },
+            VerilogFile {
+                id: "2".into(),
+                name: "dut.v".into(),
+                content: "module dut;\nendmodule".into(),
+                file_type: "verilog".into(),
+                project_id: "p".into(),
+            }
+        ];
+        let tb = detect_testbench_module(&files);
+        assert_eq!(tb, Some("sim_runner".to_string()));
+    }
+
+    #[test]
+    fn test_detect_testbench_module_tb_suffix() {
+        let files = vec![
+            VerilogFile {
+                id: "1".into(),
+                name: "counter_tb.v".into(),
+                content: "module testbench;\nendmodule".into(),
+                file_type: "verilog".into(),
+                project_id: "p".into(),
+            },
+            VerilogFile {
+                id: "2".into(),
+                name: "counter.v".into(),
+                content: "module counter;\nendmodule".into(),
+                file_type: "verilog".into(),
+                project_id: "p".into(),
+            }
+        ];
+        let tb = detect_testbench_module(&files);
+        assert_eq!(tb, Some("testbench".to_string()));
     }
 }

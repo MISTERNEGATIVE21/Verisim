@@ -27,6 +27,34 @@ interface SynthesisViewerProps {
   variant?: 'dock' | 'drawer';
 }
 
+export function categorizeCells(cellCounts: Record<string, number>) {
+  let andCount = 0;
+  let orCount = 0;
+  let xorCount = 0;
+  let dffCount = 0;
+  let notCount = 0;
+  let otherCount = 0;
+
+  for (const [cell, count] of Object.entries(cellCounts)) {
+    const uc = cell.toUpperCase();
+    if (uc.includes('XOR') || uc.includes('XNOR')) {
+      xorCount += count;
+    } else if (uc.includes('AND') || uc.includes('NAND')) {
+      andCount += count;
+    } else if (uc.includes('OR') || uc.includes('NOR')) {
+      orCount += count;
+    } else if (uc.includes('DFF') || uc.includes('LATCH') || uc.includes('REG')) {
+      dffCount += count;
+    } else if (uc.includes('NOT') || uc.includes('INV') || uc.includes('BUF')) {
+      notCount += count;
+    } else {
+      otherCount += count;
+    }
+  }
+
+  return { andCount, orCount, xorCount, dffCount, notCount, otherCount };
+}
+
 export function SynthesisViewer({ variant = 'dock' }: SynthesisViewerProps) {
   const {
     currentProject,
@@ -105,25 +133,8 @@ export function SynthesisViewer({ variant = 'dock' }: SynthesisViewerProps) {
     setTimeout(() => setCopiedInstallCmd(false), 2000);
   };
 
-  // Group cells into categories
   const cellCounts = synthesisResult?.cell_counts || {};
-  let andCount = 0;
-  let orCount = 0;
-  let xorCount = 0;
-  let dffCount = 0;
-  let notCount = 0;
-  let otherCount = 0;
-
-  for (const [cell, count] of Object.entries(cellCounts)) {
-    const uc = cell.toUpperCase();
-    if (uc.includes('AND')) andCount += count;
-    else if (uc.includes('OR')) orCount += count;
-    else if (uc.includes('XOR') || uc.includes('XNOR')) xorCount += count;
-    else if (uc.includes('DFF') || uc.includes('LATCH') || uc.includes('REG')) dffCount += count;
-    else if (uc.includes('NOT') || uc.includes('INV') || uc.includes('BUF')) notCount += count;
-    else otherCount += count;
-  }
-
+  const { andCount, orCount, xorCount, dffCount, notCount } = categorizeCells(cellCounts);
   const totalCells = Object.values(cellCounts).reduce((acc, c) => acc + c, 0);
 
   return (
