@@ -8,21 +8,19 @@ import {
   FileCog, 
   ChevronDown, 
   ChevronRight, 
-  FolderOpen,
-  Plus,
-  FilePlus,
-  Trash2,
-  X,
-  Edit2,
-  File,
-  Database
+  FolderOpen, 
+  FilePlus, 
+  Trash2, 
+  Edit2, 
+  File, 
+  Database,
+  Sparkles
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -36,14 +34,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from 'sonner';
 
 export function FileExplorer() {
   const { 
     currentProject, 
-    setCurrentProject,
+    setCurrentProject, 
     activeFile, 
     openFile, 
-    closeFile,
+    closeFile, 
     sidebarCollapsed 
   } = useIDEStore();
   
@@ -53,59 +52,88 @@ export function FileExplorer() {
   const [editingFile, setEditingFile] = useState<VerilogFile | null>(null);
   const [newFileName, setNewFileName] = useState('');
   const [renameValue, setRenameValue] = useState('');
-  const [newFileType, setNewFileType] = useState('verilog');
+  const [newFileType, setNewFileType] = useState('systemverilog');
   const [isCreating, setIsCreating] = useState(false);
 
   if (sidebarCollapsed || !currentProject) return null;
 
   const getFileIcon = (type: string, name: string) => {
-    if (type === 'testbench') return <FileCog className="h-4 w-4 text-amber-500" />;
-    if (type === 'memory') return <Database className="h-4 w-4 text-purple-500" />;
-    if (type === 'verilog') return <FileCode className="h-4 w-4 text-blue-500" />;
+    if (name.endsWith('.sv') || name.endsWith('.svh') || type === 'systemverilog') {
+      return <FileCode className="h-4 w-4 text-purple-400" />;
+    }
+    if (name.endsWith('.py') || type === 'python') {
+      return <span className="text-xs mr-0.5">🐍</span>;
+    }
+    if (name.includes('_tb') || type === 'testbench') {
+      return <FileCog className="h-4 w-4 text-amber-500" />;
+    }
+    if (type === 'memory' || name.endsWith('.hex') || name.endsWith('.mem')) {
+      return <Database className="h-4 w-4 text-cyan-400" />;
+    }
+    if (name.endsWith('.v') || type === 'verilog') {
+      return <FileCode className="h-4 w-4 text-blue-500" />;
+    }
     return <File className="h-4 w-4 text-muted-foreground" />;
   };
 
   const getDefaultContent = (name: string, type: string): string => {
-    const baseName = name.replace(/\.[^/.]+$/, ''); // strip extension
+    const baseName = name.replace(/\.[^/.]+$/, '');
 
-    if (type === 'testbench') {
+    if (type === 'systemverilog' || name.endsWith('.sv')) {
+      return `// SystemVerilog Module
+module ${baseName} #(
+    parameter int DATA_WIDTH = 8
+) (
+    input  logic                  clk,
+    input  logic                  rst_n,
+    input  logic [DATA_WIDTH-1:0] data_in,
+    output logic [DATA_WIDTH-1:0] data_out
+);
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            data_out <= '0;
+        end else begin
+            data_out <= data_in;
+        end
+    end
+
+endmodule`;
+    }
+
+    if (type === 'python' || name.endsWith('.py')) {
+      return `#!/usr/bin/env python3
+"""
+Python Verification Script: ${baseName}
+"""
+
+def main():
+    print("Running Python verification for ${baseName}...")
+    # Add your test stimulus or output analysis here
+
+if __name__ == "__main__":
+    main()`;
+    }
+
+    if (type === 'testbench' || name.includes('_tb')) {
       return `\`timescale 1ns/1ps
 
 module ${baseName}();
 
-    // Inputs
     reg clk;
     reg rst;
 
-    // Outputs
-    // wire ...
-
-    // Instantiate the Unit Under Test (UUT)
-    // uut_name uut (
-    //     .clk(clk),
-    //     .rst(rst)
-    // );
-
-    // Clock generation
     initial begin
         clk = 0;
         forever #5 clk = ~clk;
     end
 
     initial begin
-        // Initialize Inputs
         rst = 1;
-        
-        // Wait 100 ns for global reset to finish
-        #100;
-        rst = 0;
-        
-        // Add stimulus here
-        
-        #1000 $finish;
+        #20 rst = 0;
+        #100 $finish;
     end
 
-    // Generate VCD for waveform viewing
     initial begin
         $dumpfile("${baseName}.vcd");
         $dumpvars(0, ${baseName});
@@ -116,22 +144,21 @@ endmodule`;
 
     if (type === 'verilog') {
       return `module ${baseName}(
-
+    input wire clk,
+    input wire rst
 );
 
 endmodule`;
     }
 
     if (type === 'memory') {
-      return `// Memory initialization file
-// One value per line, hex format
+      return `// Hex memory initialization
 00
 01
 02
 03`;
     }
 
-    // Generic empty file
     return '';
   };
 
@@ -140,13 +167,14 @@ endmodule`;
     
     setIsCreating(true);
     try {
-      // Use the filename as-is. If it has no extension, add one based on type.
       let name = newFileName.trim();
       if (!name.includes('.')) {
         switch (newFileType) {
-          case 'testbench': name += '_tb.v'; break;
+          case 'systemverilog': name += '.sv'; break;
+          case 'python': name += '.py'; break;
+          case 'testbench': name += '_tb.sv'; break;
           case 'verilog': name += '.v'; break;
-          case 'memory': name += '.mem'; break;
+          case 'memory': name += '.hex'; break;
           default: name += '.txt'; break;
         }
       }
@@ -169,18 +197,20 @@ endmodule`;
       };
       setCurrentProject(updatedProject);
       openFile(newFile);
+      toast.success(`Created file ${name}`);
       
       setNewFileOpen(false);
       setNewFileName('');
     } catch (error) {
       console.error('Failed to create file:', error);
+      toast.error('Failed to create file');
     } finally {
       setIsCreating(false);
     }
   };
 
   const renameFile = async () => {
-    if (!editingFile || !renameValue.trim()) return;
+    if (!editingFile || !renameValue.trim() || !currentProject) return;
     
     try {
       const name = renameValue.trim();
@@ -198,8 +228,10 @@ endmodule`;
       
       setRenameOpen(false);
       setEditingFile(null);
+      toast.success(`Renamed to ${name}`);
     } catch (error) {
       console.error('Failed to rename file:', error);
+      toast.error('Failed to rename file');
     }
   };
 
@@ -214,34 +246,54 @@ endmodule`;
         files: currentProject.files.filter(f => f.id !== fileId)
       };
       setCurrentProject(updatedProject);
+      toast.success('File deleted');
     } catch (error) {
       console.error('Failed to delete file:', error);
     }
   };
 
   const files = currentProject.files || [];
-  const verilogFiles = files.filter(f => f.type === 'verilog');
-  const testbenchFiles = files.filter(f => f.type === 'testbench');
-  const memoryFiles = files.filter(f => f.type === 'memory');
-  const otherFiles = files.filter(f => !['verilog', 'testbench', 'memory'].includes(f.type));
+  
+  // Clean categorization
+  const designFiles = files.filter(f => 
+    !f.name.includes('_tb') && 
+    (f.name.endsWith('.v') || f.name.endsWith('.sv') || f.type === 'verilog' || f.type === 'systemverilog')
+  );
+
+  const testbenchFiles = files.filter(f => 
+    f.name.includes('_tb') || f.type === 'testbench'
+  );
+
+  const pythonFiles = files.filter(f => 
+    f.name.endsWith('.py') || f.type === 'python'
+  );
+
+  const memoryFiles = files.filter(f => 
+    f.name.endsWith('.hex') || f.name.endsWith('.mem') || f.type === 'memory'
+  );
+
+  const otherFiles = files.filter(f => 
+    !designFiles.includes(f) && 
+    !testbenchFiles.includes(f) && 
+    !pythonFiles.includes(f) && 
+    !memoryFiles.includes(f)
+  );
 
   return (
-    <div className="h-full flex flex-col bg-muted/30 border-r border-border">
-      <div className="p-2 border-b border-border flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Explorer
+    <div className="h-full flex flex-col bg-[#0d1017] border-r border-border/60 text-foreground select-none">
+      <div className="p-2 border-b border-border/50 flex items-center justify-between">
+        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+          Project Files
         </span>
-        <div className="flex items-center gap-1">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6" 
-            onClick={() => { setNewFileType('verilog'); setNewFileName(''); setNewFileOpen(true); }}
-            title="New File"
-          >
-            <FilePlus className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-6 w-6 text-muted-foreground hover:text-foreground" 
+          onClick={() => { setNewFileType('systemverilog'); setNewFileName(''); setNewFileOpen(true); }}
+          title="Create New File"
+        >
+          <FilePlus className="h-3.5 w-3.5" />
+        </Button>
       </div>
       
       <ScrollArea className="flex-1">
@@ -249,26 +301,26 @@ endmodule`;
           <div className="mb-2">
             <button
               onClick={() => setExpanded(!expanded)}
-              className="flex items-center gap-1 px-2 py-1 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
+              className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted/30 rounded w-full"
             >
               {expanded ? (
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-3 w-3" />
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
               )}
-              <FolderOpen className="h-4 w-4 text-amber-500" />
+              <FolderOpen className="h-3.5 w-3.5 text-blue-400" />
               <span className="truncate">{currentProject.name}</span>
             </button>
             
             {expanded && (
-              <div className="ml-4">
-                {/* Design Files */}
-                {verilogFiles.length > 0 && (
-                  <div className="mb-1">
-                    <div className="text-[10px] text-muted-foreground px-2 py-1 uppercase font-bold opacity-50">
-                      Design
+              <div className="ml-2 pl-2 border-l border-border/30 space-y-2 mt-1">
+                {/* Design Modules */}
+                {designFiles.length > 0 && (
+                  <div>
+                    <div className="text-[10px] text-muted-foreground/70 px-2 py-0.5 uppercase font-bold tracking-wider">
+                      HDL Modules
                     </div>
-                    {verilogFiles.map((file) => (
+                    {designFiles.map((file) => (
                       <FileItem 
                         key={file.id} 
                         file={file} 
@@ -282,10 +334,10 @@ endmodule`;
                   </div>
                 )}
                 
-                {/* Testbench Files */}
+                {/* Testbenches */}
                 {testbenchFiles.length > 0 && (
-                  <div className="mb-1">
-                    <div className="text-[10px] text-muted-foreground px-2 py-1 uppercase font-bold opacity-50">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground/70 px-2 py-0.5 uppercase font-bold tracking-wider">
                       Testbenches
                     </div>
                     {testbenchFiles.map((file) => (
@@ -302,11 +354,31 @@ endmodule`;
                   </div>
                 )}
 
+                {/* Python Scripts */}
+                {pythonFiles.length > 0 && (
+                  <div>
+                    <div className="text-[10px] text-muted-foreground/70 px-2 py-0.5 uppercase font-bold tracking-wider">
+                      Python Verification
+                    </div>
+                    {pythonFiles.map((file) => (
+                      <FileItem 
+                        key={file.id} 
+                        file={file} 
+                        isActive={activeFile?.id === file.id}
+                        onClick={() => openFile(file)}
+                        onRename={(f) => { setEditingFile(f); setRenameValue(f.name); setRenameOpen(true); }}
+                        onDelete={(e) => deleteFile(e, file.id)}
+                        icon={getFileIcon(file.type, file.name)}
+                      />
+                    ))}
+                  </div>
+                )}
+
                 {/* Memory Files */}
                 {memoryFiles.length > 0 && (
-                  <div className="mb-1">
-                    <div className="text-[10px] text-muted-foreground px-2 py-1 uppercase font-bold opacity-50">
-                      Memory
+                  <div>
+                    <div className="text-[10px] text-muted-foreground/70 px-2 py-0.5 uppercase font-bold tracking-wider">
+                      Memory & Vectors
                     </div>
                     {memoryFiles.map((file) => (
                       <FileItem 
@@ -324,8 +396,8 @@ endmodule`;
 
                 {/* Other Files */}
                 {otherFiles.length > 0 && (
-                  <div className="mb-1">
-                    <div className="text-[10px] text-muted-foreground px-2 py-1 uppercase font-bold opacity-50">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground/70 px-2 py-0.5 uppercase font-bold tracking-wider">
                       Other
                     </div>
                     {otherFiles.map((file) => (
@@ -349,53 +421,50 @@ endmodule`;
 
       {/* New File Dialog */}
       <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[400px] bg-[#0d1017] border-border/80 text-foreground">
           <DialogHeader>
             <DialogTitle>Create New File</DialogTitle>
-            <DialogDescription>
-              Add a new file to the project.
-            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="fileType">File Type</Label>
+          <div className="grid gap-3 py-2 text-xs">
+            <div className="grid gap-1.5">
+              <Label>File Type</Label>
               <Select value={newFileType} onValueChange={setNewFileType}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-[#121622] border-border/60 text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="verilog">Verilog Module (.v)</SelectItem>
-                  <SelectItem value="testbench">Testbench (.v)</SelectItem>
-                  <SelectItem value="memory">Memory File (.mem)</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                <SelectContent className="bg-[#121622] border-border/80 text-xs">
+                  <SelectItem value="systemverilog">SystemVerilog (.sv)</SelectItem>
+                  <SelectItem value="verilog">Verilog (.v)</SelectItem>
+                  <SelectItem value="python">Python Script (.py)</SelectItem>
+                  <SelectItem value="testbench">Testbench (_tb.sv)</SelectItem>
+                  <SelectItem value="memory">Memory Vector (.hex / .mem)</SelectItem>
+                  <SelectItem value="other">Generic File</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               <Label htmlFor="fileName">File Name</Label>
               <Input
                 id="fileName"
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
                 placeholder={
-                  newFileType === 'testbench' ? 'module_tb' :
-                  newFileType === 'memory' ? 'init_data' :
-                  newFileType === 'other' ? 'readme.txt' :
+                  newFileType === 'systemverilog' ? 'alu.sv' :
+                  newFileType === 'python' ? 'verify.py' :
+                  newFileType === 'testbench' ? 'alu_tb.sv' :
                   'module_name'
                 }
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') createFile(); }}
+                className="bg-[#121622] border-border/60 text-xs"
               />
-              <p className="text-xs text-muted-foreground">
-                Extension will be added automatically if not provided.
-              </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewFileOpen(false)}>
+            <Button variant="ghost" size="sm" onClick={() => setNewFileOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={createFile} disabled={!newFileName.trim() || isCreating}>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={createFile} disabled={!newFileName.trim() || isCreating}>
               {isCreating ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
@@ -404,12 +473,12 @@ endmodule`;
 
       {/* Rename Dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[400px] bg-[#0d1017] border-border/80 text-foreground">
           <DialogHeader>
             <DialogTitle>Rename File</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
+          <div className="grid gap-3 py-2 text-xs">
+            <div className="grid gap-1.5">
               <Label htmlFor="renameValue">New Name</Label>
               <Input
                 id="renameValue"
@@ -417,14 +486,15 @@ endmodule`;
                 onChange={(e) => setRenameValue(e.target.value)}
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') renameFile(); }}
+                className="bg-[#121622] border-border/60 text-xs"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>
+            <Button variant="ghost" size="sm" onClick={() => setRenameOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={renameFile} disabled={!renameValue.trim()}>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={renameFile} disabled={!renameValue.trim()}>
               Rename
             </Button>
           </DialogFooter>
@@ -448,8 +518,8 @@ function FileItem({ file, isActive, onClick, onRename, onDelete, icon }: FileIte
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-2 py-1 text-sm w-full text-left rounded hover:bg-accent group cursor-pointer",
-        isActive && "bg-accent text-accent-foreground"
+        "flex items-center gap-2 px-2 py-1 text-xs w-full text-left rounded hover:bg-[#151a27] group cursor-pointer transition-colors",
+        isActive ? "bg-[#181e2e] text-blue-400 font-medium" : "text-muted-foreground hover:text-foreground"
       )}
     >
       {icon}
@@ -457,14 +527,14 @@ function FileItem({ file, isActive, onClick, onRename, onDelete, icon }: FileIte
       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
         <button 
           onClick={(e) => { e.stopPropagation(); onRename(file); }}
-          className="p-1 hover:text-blue-500"
+          className="p-1 hover:text-blue-400"
           title="Rename File"
         >
           <Edit2 className="h-3 w-3" />
         </button>
         <button 
           onClick={onDelete}
-          className="p-1 hover:text-red-500"
+          className="p-1 hover:text-rose-400"
           title="Delete File"
         >
           <Trash2 className="h-3 w-3" />
