@@ -31,6 +31,13 @@ pub struct SimulationResult {
     pub vcd_content: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PythonResult {
+    pub success: bool,
+    pub output: String,
+    pub exit_code: i32,
+}
+
 #[tauri::command]
 fn open_project(path: String) -> Result<Project, String> {
     let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -46,7 +53,8 @@ fn save_project(path: String, project: Project) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn simulate(files: Vec<VerilogFile>) -> Result<SimulationResult, String> {
+async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<SimulationResult, String> {
+    let chosen_engine = engine.unwrap_or_else(|| "iverilog".to_string());
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -55,26 +63,64 @@ async fn simulate(files: Vec<VerilogFile>) -> Result<SimulationResult, String> {
     let temp_dir = std::env::temp_dir().join(format!("verisim_{}", now));
     fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
 
+    let mut has_sv = false;
     for file in &files {
+        if file.name.ends_with(".sv") || file.name.ends_with(".svh") {
+            has_sv = true;
+        }
         let file_path = temp_dir.join(&file.name);
         fs::write(file_path, &file.content).map_err(|e| e.to_string())?;
     }
 
+    if chosen_engine == "verilator" {
+        let mut verilator_cmd = Command::new("verilator");
+        verilator_cmd.arg("--lint-only").arg("-Wall");
+        if has_sv {
+            verilator_cmd.arg("--sv");
+        }
+        for file in &files {
+            if file.name.ends_with(".v") || file.name.ends_with(".sv") {
+                verilator_cmd.arg(temp_dir.join(&file.name));
+            }
+        }
+        let output = verilator_cmd.output().map_err(|e| format!("Failed to run verilator: {}", e))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let full_output = format!("=== Verilator Lint Analysis ===\n{}{}", stdout, stderr);
+        let _ = fs::remove_dir_all(&temp_dir);
+        let is_clean = full_output.trim() == "=== Verilator Lint Analysis ===";
+        return Ok(SimulationResult {
+            success: output.status.success(),
+            output: if is_clean {
+                "=== Verilator Lint Analysis ===\n✓ No lint warnings or syntax errors found. Design is clean!".to_string()
+            } else {
+                full_output
+            },
+            vcd_content: None,
+        });
+    }
+
+    // Default or both: iverilog simulation
     let vvp_file = temp_dir.join("simulation.vvp");
-    
     let mut compile_cmd = Command::new("iverilog");
+    if has_sv {
+        compile_cmd.arg("-g2012");
+    }
     compile_cmd.arg("-o").arg(&vvp_file);
     for file in &files {
-        compile_cmd.arg(temp_dir.join(&file.name));
+        if file.name.ends_with(".v") || file.name.ends_with(".sv") {
+            compile_cmd.arg(temp_dir.join(&file.name));
+        }
     }
 
     let compile_output = compile_cmd.output().map_err(|e| format!("Failed to run iverilog: {}", e))?;
     
     if !compile_output.status.success() {
         let stderr = String::from_utf8_lossy(&compile_output.stderr).to_string();
+        let _ = fs::remove_dir_all(&temp_dir);
         return Ok(SimulationResult {
             success: false,
-            output: stderr,
+            output: format!("=== Compilation Failed ===\n{}", stderr),
             vcd_content: None,
         });
     }
@@ -109,6 +155,49 @@ async fn simulate(files: Vec<VerilogFile>) -> Result<SimulationResult, String> {
     })
 }
 
+#[tauri::command]
+async fn run_python(script_name: String, files: Vec<VerilogFile>, args: Vec<String>) -> Result<PythonResult, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+    
+    let temp_dir = std::env::temp_dir().join(format!("verisim_py_{}", now));
+    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+
+    for file in &files {
+        let file_path = temp_dir.join(&file.name);
+        fs::write(file_path, &file.content).map_err(|e| e.to_string())?;
+    }
+
+    let script_path = temp_dir.join(&script_name);
+    let mut cmd = Command::new("python3");
+    cmd.arg(&script_path);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    cmd.current_dir(&temp_dir);
+
+    let output = cmd.output().map_err(|e| format!("Failed to run python3: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    let full_output = if !stderr.is_empty() {
+        format!("{}\n[stderr]:\n{}", stdout, stderr)
+    } else {
+        stdout
+    };
+
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    Ok(PythonResult {
+        success: output.status.success(),
+        output: full_output,
+        exit_code,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -121,7 +210,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_project,
             save_project,
-            simulate
+            simulate,
+            run_python
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
