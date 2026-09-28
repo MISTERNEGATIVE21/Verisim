@@ -30,12 +30,25 @@ export interface SimulationResult {
 }
 
 export type SimulationEngine = 'iverilog' | 'verilator' | 'both';
-export type DockTab = 'console' | 'python' | 'waveform';
+export type DockTab = 'console' | 'python' | 'waveform' | 'synth';
+export type ActivityTab = 'files' | 'synth' | 'waveform' | 'ai';
 
 export interface PythonResult {
   success: boolean;
   output: string;
   exit_code: number;
+}
+
+export interface SynthesisResult {
+  success: boolean;
+  output: string;
+  gate_verilog: string;
+  top_module: string;
+  cell_counts: Record<string, number>;
+  wire_count: number;
+  bit_count: number;
+  public_wires: number;
+  error?: string;
 }
 
 interface IDEState {
@@ -65,6 +78,12 @@ interface IDEState {
   setSimulating: (simulating: boolean) => void;
   setSimulationResult: (result: SimulationResult | null) => void;
 
+  // Yosys Gate Synthesis
+  synthesisResult: SynthesisResult | null;
+  isSynthesizing: boolean;
+  setSynthesizing: (synthesizing: boolean) => void;
+  setSynthesisResult: (result: SynthesisResult | null) => void;
+
   // Python Verification Hub
   pythonResult: PythonResult | null;
   isPythonRunning: boolean;
@@ -83,6 +102,8 @@ interface IDEState {
   toggleHighlightSystemTasks: () => void;
 
   // UI State & All-in-One Docking
+  activeActivityTab: ActivityTab;
+  setActiveActivityTab: (tab: ActivityTab) => void;
   showWaveform: boolean;
   setShowWaveform: (show: boolean) => void;
   activeDockTab: DockTab;
@@ -188,6 +209,12 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   setSimulating: (simulating) => set({ isSimulating: simulating }),
   setSimulationResult: (result) => set({ simulationResult: result }),
 
+  // Yosys Gate Synthesis
+  synthesisResult: null,
+  isSynthesizing: false,
+  setSynthesizing: (synthesizing) => set({ isSynthesizing: synthesizing }),
+  setSynthesisResult: (result) => set({ synthesisResult: result }),
+
   // Python Verification Hub
   pythonResult: null,
   isPythonRunning: false,
@@ -206,6 +233,8 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   toggleHighlightSystemTasks: () => set((state) => ({ highlightSystemTasks: !state.highlightSystemTasks })),
 
   // UI State & All-in-One Docking
+  activeActivityTab: 'files',
+  setActiveActivityTab: (tab) => set({ activeActivityTab: tab }),
   showWaveform: true,
   setShowWaveform: (show) => set({ showWaveform: show }),
   activeDockTab: 'console',

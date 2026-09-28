@@ -138,6 +138,35 @@ export async function runPythonScript(scriptName: string, files: any[], args: st
   }
 }
 
+export async function synthesizeRTL(files: any[], topModule?: string) {
+  console.log('TauriDB: synthesizeRTL called', { topModule });
+  try {
+    const backendFiles = files.map(f => ({
+      id: f.id,
+      name: f.name,
+      content: f.content,
+      type: f.type,
+      project_id: f.project_id || 'default'
+    }));
+    const result = await invoke<any>('synthesize', { files: backendFiles, topModule: topModule || null });
+    console.log('TauriDB: synthesizeRTL success', result);
+    return result;
+  } catch (error) {
+    console.error('TauriDB: synthesizeRTL error:', error);
+    return {
+      success: false,
+      output: `Synthesis failed: ${error}`,
+      gate_verilog: '',
+      top_module: topModule || '',
+      cell_counts: {},
+      wire_count: 0,
+      bit_count: 0,
+      public_wires: 0,
+      error: String(error)
+    };
+  }
+}
+
 export function getTemplateFiles(template: string) {
   const templates: Record<string, Array<{ name: string; content: string; type: string }>> = {
     none: [
