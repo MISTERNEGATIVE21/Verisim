@@ -5,8 +5,6 @@
   "identifier": "com.verisim.ide",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3077",
-    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
   "app": {
