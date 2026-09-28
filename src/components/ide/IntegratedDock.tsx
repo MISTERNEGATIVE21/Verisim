@@ -4,6 +4,7 @@ import { useIDEStore, DockTab } from '@/store/ide-store';
 import { ConsoleOutput } from './ConsoleOutput';
 import { PythonOutput } from './PythonOutput';
 import { WaveformViewer } from './WaveformViewer';
+import { SynthesisViewer } from './SynthesisViewer';
 import { Button } from '@/components/ui/button';
 import { 
   Terminal,
@@ -17,7 +18,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Sparkles
+  Sparkles,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -33,8 +35,11 @@ export function IntegratedDock() {
     simulationResult,
     isPythonRunning,
     pythonResult,
+    synthesisResult,
+    isSynthesizing,
     setSimulationResult,
     setPythonResult,
+    setSynthesisResult,
     waveformLayout,
     toggleWaveformLayout
   } = useIDEStore();
@@ -44,10 +49,15 @@ export function IntegratedDock() {
       setSimulationResult(null);
     } else if (activeDockTab === 'python') {
       setPythonResult(null);
+    } else if (activeDockTab === 'synth') {
+      setSynthesisResult(null);
     }
   };
 
   const hasVCD = Boolean(simulationResult?.vcdContent);
+  const totalGates = synthesisResult?.cell_counts 
+    ? Object.values(synthesisResult.cell_counts).reduce((a, b) => a + b, 0)
+    : 0;
 
   return (
     <div className={cn(
@@ -128,6 +138,34 @@ export function IntegratedDock() {
               </span>
             )}
           </button>
+
+          {/* Tab 4: Gate Synthesis */}
+          <button
+            onClick={() => setActiveDockTab('synth')}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-t text-xs font-medium transition-colors border-b-2",
+              activeDockTab === 'synth' && !dockCollapsed
+                ? "bg-background text-violet-400 border-violet-500 shadow-sm"
+                : "text-muted-foreground hover:text-foreground border-transparent hover:bg-muted/20"
+            )}
+          >
+            <Zap className="h-3.5 w-3.5 text-violet-500" />
+            <span>Gate Synthesis</span>
+            {isSynthesizing ? (
+              <span className="flex items-center gap-1 text-[10px] text-violet-400 font-normal">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                Synthesizing
+              </span>
+            ) : synthesisResult ? (
+              synthesisResult.success ? (
+                <span className="text-[10px] font-semibold text-violet-400 bg-violet-500/10 px-1.5 py-0.2 rounded border border-violet-500/30">
+                  {totalGates} Gates
+                </span>
+              ) : (
+                <span className="h-2 w-2 rounded-full bg-rose-500" title="Synthesis failed" />
+              )
+            ) : null}
+          </button>
         </div>
 
         {/* Right Action Controls */}
@@ -181,6 +219,7 @@ export function IntegratedDock() {
           {activeDockTab === 'console' && <ConsoleOutput />}
           {activeDockTab === 'python' && <PythonOutput />}
           {activeDockTab === 'waveform' && <WaveformViewer />}
+          {activeDockTab === 'synth' && <SynthesisViewer variant="dock" />}
         </div>
       )}
     </div>
