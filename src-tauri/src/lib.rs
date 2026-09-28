@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
+use std::io::ErrorKind;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -38,6 +40,80 @@ pub struct PythonResult {
     pub exit_code: i32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SynthesisResult {
+    pub success: bool,
+    pub output: String,
+    pub gate_verilog: String,
+    pub top_module: String,
+    pub cell_counts: HashMap<String, usize>,
+    pub wire_count: usize,
+    pub bit_count: usize,
+    pub public_wires: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+pub fn detect_modules(content: &str) -> Vec<String> {
+    let mut modules = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("module") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let name_part = parts[1];
+                let mod_name = name_part
+                    .trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+                if !mod_name.is_empty() {
+                    modules.push(mod_name.to_string());
+                }
+            }
+        }
+    }
+    modules
+}
+
+pub fn parse_yosys_stat(output: &str) -> (HashMap<String, usize>, usize, usize, usize) {
+    let mut cell_counts = HashMap::new();
+    let mut wire_count = 0;
+    let mut bit_count = 0;
+    let mut public_wires = 0;
+    let mut in_cells = false;
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Number of wires:") {
+            if let Some(val_str) = trimmed.split(':').nth(1) {
+                wire_count = val_str.trim().parse::<usize>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("Number of wire bits:") {
+            if let Some(val_str) = trimmed.split(':').nth(1) {
+                bit_count = val_str.trim().parse::<usize>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("Number of public wires:") {
+            if let Some(val_str) = trimmed.split(':').nth(1) {
+                public_wires = val_str.trim().parse::<usize>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("Number of cells:") {
+            in_cells = true;
+        } else if in_cells {
+            if trimmed.is_empty() || trimmed.starts_with("===") {
+                in_cells = false;
+            } else {
+                let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+                if tokens.len() >= 2 {
+                    let cell_name = tokens[0].to_string();
+                    if let Ok(count) = tokens[1].parse::<usize>() {
+                        cell_counts.insert(cell_name, count);
+                    }
+                }
+            }
+        }
+    }
+
+    (cell_counts, wire_count, bit_count, public_wires)
+}
+
 #[tauri::command]
 fn open_project(path: String) -> Result<Project, String> {
     let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -73,6 +149,104 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
     }
 
     if chosen_engine == "verilator" {
+        // Detect if there is a testbench module or $dumpfile in any file
+        let mut testbench_module: Option<String> = None;
+
+        for file in &files {
+            let mods = detect_modules(&file.content);
+            for m in mods {
+                if file.name.contains("_tb") || m.ends_with("_tb") {
+                    testbench_module = Some(m);
+                    break;
+                }
+            }
+        }
+
+        // If testbench found: compile with verilator --binary --trace
+        if let Some(top_tb) = testbench_module {
+            let mut verilator_cmd = Command::new("verilator");
+            verilator_cmd
+                .arg("--binary")
+                .arg("--trace")
+                .arg("--trace-structs")
+                .arg("-Wall")
+                .arg("-Wno-fatal")
+                .arg("-Wno-WIDTHEXPAND")
+                .arg("-Wno-WIDTHTRUNC")
+                .arg("-Wno-DECLFILENAME")
+                .arg("-Wno-UNDRIVEN")
+                .arg("-Wno-UNUSEDSIGNAL")
+                .arg("--top-module")
+                .arg(&top_tb)
+                .arg("-Mdir")
+                .arg(temp_dir.join("obj_dir"));
+
+            for file in &files {
+                if file.name.ends_with(".v") || file.name.ends_with(".sv") {
+                    verilator_cmd.arg(temp_dir.join(&file.name));
+                }
+            }
+
+            verilator_cmd.current_dir(&temp_dir);
+
+            let compile_res = verilator_cmd.output().map_err(|e| format!("Failed to run verilator: {}", e))?;
+            let stdout_comp = String::from_utf8_lossy(&compile_res.stdout).to_string();
+            let stderr_comp = String::from_utf8_lossy(&compile_res.stderr).to_string();
+
+            if !compile_res.status.success() {
+                let _ = fs::remove_dir_all(&temp_dir);
+                return Ok(SimulationResult {
+                    success: false,
+                    output: format!("=== Verilator Compilation Failed ===\n{}{}", stdout_comp, stderr_comp),
+                    vcd_content: None,
+                });
+            }
+
+            // Run the compiled binary
+            let bin_name = format!("V{}", top_tb);
+            let bin_path = temp_dir.join("obj_dir").join(&bin_name);
+
+            let sim_res = Command::new(&bin_path)
+                .current_dir(&temp_dir)
+                .output();
+
+            let (sim_out, sim_success) = match sim_res {
+                Ok(output) => {
+                    let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+                    let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+                    (format!("{}{}", out_str, err_str), output.status.success())
+                }
+                Err(e) => (format!("Simulation execution failed: {}", e), false),
+            };
+
+            // Search for produced VCD file in temp_dir
+            let mut vcd_content = None;
+            if let Ok(entries) = fs::read_dir(&temp_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().extension().map_or(false, |ext| ext == "vcd") {
+                        if let Ok(content) = fs::read_to_string(entry.path()) {
+                            vcd_content = Some(content);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let full_log = format!(
+                "=== Verilator Simulation Report ===\n{}\n=== Run Output ===\n{}",
+                stderr_comp, sim_out
+            );
+
+            let _ = fs::remove_dir_all(&temp_dir);
+
+            return Ok(SimulationResult {
+                success: sim_success,
+                output: full_log,
+                vcd_content,
+            });
+        }
+
+        // Fallback: lint-only if no testbench
         let mut verilator_cmd = Command::new("verilator");
         verilator_cmd.arg("--lint-only").arg("-Wall").arg("-Wno-fatal");
         if has_sv {
@@ -198,6 +372,121 @@ async fn run_python(script_name: String, files: Vec<VerilogFile>, args: Vec<Stri
     })
 }
 
+#[tauri::command]
+async fn synthesize(files: Vec<VerilogFile>, top_module: Option<String>) -> Result<SynthesisResult, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+
+    let temp_dir = std::env::temp_dir().join(format!("verisim_synth_{}", now));
+    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+
+    let mut declared_modules = Vec::new();
+    let mut file_names = Vec::new();
+
+    for file in &files {
+        if file.name.ends_with(".v") || file.name.ends_with(".sv") || file.name.ends_with(".svh") {
+            let file_path = temp_dir.join(&file.name);
+            fs::write(&file_path, &file.content).map_err(|e| e.to_string())?;
+            file_names.push(file.name.clone());
+            let found = detect_modules(&file.content);
+            for m in found {
+                if !file.name.contains("_tb") && !m.ends_with("_tb") {
+                    declared_modules.push(m);
+                }
+            }
+        }
+    }
+
+    let top = match top_module {
+        Some(m) if !m.trim().is_empty() => m,
+        _ => declared_modules.first().cloned().unwrap_or_else(|| "top".to_string()),
+    };
+
+    let synth_gates_file = temp_dir.join("synth_gates.v");
+
+    // Construct yosys command script
+    let read_cmd = format!("read_verilog -sv {}", file_names.join(" "));
+    let yosys_script = format!(
+        "{}; hierarchy -check -top {}; proc; opt; fsm; opt; memory; opt; techmap; opt; abc -g AND,NAND,OR,NOR,XOR,XNOR; opt; clean; stat; write_verilog -noattr synth_gates.v",
+        read_cmd, top
+    );
+
+    let run_res = Command::new("yosys")
+        .arg("-p")
+        .arg(&yosys_script)
+        .current_dir(&temp_dir)
+        .output();
+
+    match run_res {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let full_output = format!("{}\n{}", stdout, stderr);
+
+            let (cell_counts, wire_count, bit_count, public_wires) = parse_yosys_stat(&stdout);
+
+            let gate_verilog = fs::read_to_string(&synth_gates_file).unwrap_or_default();
+            let _ = fs::remove_dir_all(&temp_dir);
+
+            if !output.status.success() {
+                return Ok(SynthesisResult {
+                    success: false,
+                    output: full_output,
+                    gate_verilog: String::new(),
+                    top_module: top,
+                    cell_counts,
+                    wire_count,
+                    bit_count,
+                    public_wires,
+                    error: Some("Yosys synthesis failed. Check syntax and module hierarchy.".to_string()),
+                });
+            }
+
+            Ok(SynthesisResult {
+                success: true,
+                output: full_output,
+                gate_verilog,
+                top_module: top,
+                cell_counts,
+                wire_count,
+                bit_count,
+                public_wires,
+                error: None,
+            })
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let _ = fs::remove_dir_all(&temp_dir);
+            Ok(SynthesisResult {
+                success: false,
+                output: "Yosys is not installed or not found in system PATH.\n\nTo enable RTL gate-level synthesis, please install Yosys:\n  • Arch Linux:   sudo pacman -S yosys\n  • Ubuntu/Debian: sudo apt install yosys\n  • Fedora:        sudo dnf install yosys\n  • macOS:         brew install yosys".to_string(),
+                gate_verilog: String::new(),
+                top_module: top,
+                cell_counts: HashMap::new(),
+                wire_count: 0,
+                bit_count: 0,
+                public_wires: 0,
+                error: Some("Yosys binary not found in PATH".to_string()),
+            })
+        }
+        Err(e) => {
+            let _ = fs::remove_dir_all(&temp_dir);
+            Ok(SynthesisResult {
+                success: false,
+                output: format!("Failed to execute Yosys: {}", e),
+                gate_verilog: String::new(),
+                top_module: top,
+                cell_counts: HashMap::new(),
+                wire_count: 0,
+                bit_count: 0,
+                public_wires: 0,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -211,8 +500,56 @@ pub fn run() {
             open_project,
             save_project,
             simulate,
-            run_python
+            run_python,
+            synthesize
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_yosys_stat() {
+        let sample_output = r#"
+=== alu ===
+
+   Number of wires:                 12
+   Number of wire bits:             28
+   Number of public wires:           8
+   Number of public wire bits:      24
+   Number of memories:               0
+   Number of memory bits:            0
+   Number of processes:              0
+   Number of cells:                  7
+     $_AND_                          3
+     $_OR_                           2
+     $_XOR_                          1
+     $_DFF_P_                        1
+"#;
+        let (cell_counts, wire_count, bit_count, public_wires) = parse_yosys_stat(sample_output);
+        assert_eq!(wire_count, 12);
+        assert_eq!(bit_count, 28);
+        assert_eq!(public_wires, 8);
+        assert_eq!(cell_counts.get("$_AND_"), Some(&3));
+        assert_eq!(cell_counts.get("$_OR_"), Some(&2));
+        assert_eq!(cell_counts.get("$_XOR_"), Some(&1));
+        assert_eq!(cell_counts.get("$_DFF_P_"), Some(&1));
+    }
+
+    #[test]
+    fn test_detect_modules() {
+        let verilog = r#"
+// Top FIFO
+module fifo_sync #(parameter W = 8) (input clk);
+endmodule
+
+module fifo_tb;
+endmodule
+"#;
+        let mods = detect_modules(verilog);
+        assert_eq!(mods, vec!["fifo_sync", "fifo_tb"]);
+    }
 }
