@@ -1,13 +1,18 @@
 'use client';
 
 import { useIDEStore } from '@/store/ide-store';
-import Editor, { OnMount, BeforeMount } from '@monaco-editor/react';
+import Editor, { OnMount, BeforeMount, loader } from '@monaco-editor/react';
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Circle, Sparkles, FileCode, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { editor, languages } from 'monaco-editor';
+
+// Configure Monaco to load from local bundled assets (100% offline, zero CDN)
+if (typeof window !== 'undefined') {
+  loader.config({ paths: { vs: '/vs' } });
+}
 
 // SystemVerilog and Verilog language configuration
 const hdlLanguageConfig: languages.LanguageConfiguration = {
@@ -164,14 +169,18 @@ export function CodeEditor() {
 
     // Register Verilog and SystemVerilog if not already registered
     const registerLang = (langId: string) => {
-      if (!monaco.languages.getLanguages().some(lang => lang.id === langId)) {
-        monaco.languages.register({ id: langId });
+      try {
+        if (!monaco.languages.getLanguages().some(lang => lang.id === langId)) {
+          monaco.languages.register({ id: langId });
+        }
+        monaco.languages.setLanguageConfiguration(langId, hdlLanguageConfig);
+        monaco.languages.setMonarchTokensProvider(
+          langId, 
+          createHDLTokensProvider(highlightPrimitives, highlightSystemTasks)
+        );
+      } catch (err) {
+        console.warn(`Language registration for ${langId}:`, err);
       }
-      monaco.languages.setLanguageConfiguration(langId, hdlLanguageConfig);
-      monaco.languages.setMonarchTokensProvider(
-        langId, 
-        createHDLTokensProvider(highlightPrimitives, highlightSystemTasks)
-      );
     };
 
     registerLang('verilog');
@@ -457,6 +466,12 @@ export function CodeEditor() {
           language={activeLanguage}
           value={activeFile.content}
           theme="verisim-dark"
+          loading={
+            <div className="h-full flex items-center justify-center bg-[#10131c] text-muted-foreground text-xs gap-2">
+              <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+              <span>Loading Monaco Editor...</span>
+            </div>
+          }
           beforeMount={handleEditorWillMount}
           onMount={handleEditorDidMount}
           onChange={handleEditorChange}

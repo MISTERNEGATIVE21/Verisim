@@ -108,8 +108,27 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   // Current active project
   currentProject: null,
   projectPath: null,
-  setCurrentProject: (project, path = null) => 
-    set({ currentProject: project, projectPath: path, openFiles: [], activeFile: null }),
+  setCurrentProject: (project, path) => 
+    set((state) => {
+      if (!project) {
+        return { currentProject: null, projectPath: null, openFiles: [], activeFile: null };
+      }
+      const isSameProject = state.currentProject?.id === project.id;
+      const targetPath = path !== undefined ? path : state.projectPath;
+      if (isSameProject) {
+        return {
+          currentProject: project,
+          projectPath: targetPath,
+        };
+      }
+      const initialFile = project.files?.[0] || null;
+      return {
+        currentProject: project,
+        projectPath: targetPath || null,
+        openFiles: initialFile ? [initialFile] : [],
+        activeFile: initialFile
+      };
+    }),
   setProjectFiles: (files) => set((state) => ({
     currentProject: state.currentProject ? { ...state.currentProject, files, updated_at: new Date().toISOString() } : null
   })),

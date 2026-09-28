@@ -1,15 +1,35 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "enables all required desktop permissions",
   "windows": [
-    "main"
+    "*"
   ],
   "permissions": [
     "core:default",
     "shell:default",
+    "shell:allow-open",
     "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
     "fs:default",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-exists",
+    "fs:allow-create",
+    "fs:allow-remove",
+    "fs:allow-mkdir",
+    "fs:allow-read-dir",
+    "fs:scope-home-recursive",
+    "fs:scope-document-recursive",
+    "fs:scope-desktop-recursive",
+    "fs:scope-appdata-recursive",
+    {
+      "identifier": "fs:scope",
+      "allow": ["**"]
+    },
     "log:default",
     "os:default",
     "process:default"

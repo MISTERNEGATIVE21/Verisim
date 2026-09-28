@@ -40,7 +40,9 @@ export function FileExplorer() {
   const { 
     currentProject, 
     setCurrentProject, 
+    setProjectFiles,
     activeFile, 
+    setActiveFile,
     openFile, 
     closeFile, 
     sidebarCollapsed 
@@ -191,12 +193,10 @@ endmodule`;
         updated_at: now
       };
       
-      const updatedProject = {
-        ...currentProject,
-        files: [...(currentProject.files || []), newFile]
-      };
-      setCurrentProject(updatedProject);
+      const updatedFiles = [...(currentProject.files || []), newFile];
+      setProjectFiles(updatedFiles);
       openFile(newFile);
+      setActiveFile(newFile);
       toast.success(`Created file ${name}`);
       
       setNewFileOpen(false);
@@ -220,11 +220,11 @@ endmodule`;
         id: `${currentProject.id}:${name}`
       };
       
-      const updatedProject = {
-        ...currentProject,
-        files: currentProject.files.map(f => f.id === editingFile.id ? updatedFile : f)
-      };
-      setCurrentProject(updatedProject);
+      const updatedFiles = currentProject.files.map(f => f.id === editingFile.id ? updatedFile : f);
+      setProjectFiles(updatedFiles);
+      if (activeFile?.id === editingFile.id) {
+        setActiveFile(updatedFile);
+      }
       
       setRenameOpen(false);
       setEditingFile(null);
@@ -241,11 +241,8 @@ endmodule`;
     
     try {
       closeFile(fileId);
-      const updatedProject = {
-        ...currentProject,
-        files: currentProject.files.filter(f => f.id !== fileId)
-      };
-      setCurrentProject(updatedProject);
+      const updatedFiles = currentProject.files.filter(f => f.id !== fileId);
+      setProjectFiles(updatedFiles);
       toast.success('File deleted');
     } catch (error) {
       console.error('Failed to delete file:', error);
