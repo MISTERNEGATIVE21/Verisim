@@ -74,7 +74,7 @@ async fn simulate(engine: Option<String>, files: Vec<VerilogFile>) -> Result<Sim
 
     if chosen_engine == "verilator" {
         let mut verilator_cmd = Command::new("verilator");
-        verilator_cmd.arg("--lint-only").arg("-Wall");
+        verilator_cmd.arg("--lint-only").arg("-Wall").arg("-Wno-fatal");
         if has_sv {
             verilator_cmd.arg("--sv");
         }
