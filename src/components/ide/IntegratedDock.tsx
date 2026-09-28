@@ -6,7 +6,8 @@ import { PythonOutput } from './PythonOutput';
 import { WaveformViewer } from './WaveformViewer';
 import { Button } from '@/components/ui/button';
 import { 
-  Terminal, 
+  Terminal,
+  Columns2, 
   Activity, 
   Maximize2, 
   Minimize2, 
@@ -33,7 +34,9 @@ export function IntegratedDock() {
     isPythonRunning,
     pythonResult,
     setSimulationResult,
-    setPythonResult
+    setPythonResult,
+    waveformLayout,
+    toggleWaveformLayout
   } = useIDEStore();
 
   const handleClearActive = () => {
@@ -48,11 +51,11 @@ export function IntegratedDock() {
 
   return (
     <div className={cn(
-      "flex flex-col bg-[#090b10] border-t border-border/70 transition-all duration-200 overflow-hidden",
+      "flex flex-col bg-background border-t border-border/70 transition-all duration-200 overflow-hidden",
       dockCollapsed ? "h-9" : "h-full"
     )}>
       {/* Dock Header Tabs & Controls */}
-      <div className="h-9 px-3 flex items-center justify-between bg-[#0d1017] border-b border-border/40 select-none">
+      <div className="h-9 px-3 flex items-center justify-between bg-muted/40 border-b border-border/40 select-none">
         {/* Left Tabs */}
         <div className="flex items-center gap-1">
           {/* Tab 1: Sim Console */}
@@ -61,7 +64,7 @@ export function IntegratedDock() {
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-t text-xs font-medium transition-colors border-b-2",
               activeDockTab === 'console' && !dockCollapsed
-                ? "bg-[#10131c] text-blue-400 border-blue-500 shadow-sm"
+                ? "bg-background text-blue-400 border-blue-500 shadow-sm"
                 : "text-muted-foreground hover:text-foreground border-transparent hover:bg-muted/20"
             )}
           >
@@ -87,7 +90,7 @@ export function IntegratedDock() {
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-t text-xs font-medium transition-colors border-b-2",
               activeDockTab === 'python' && !dockCollapsed
-                ? "bg-[#10131c] text-amber-400 border-amber-500 shadow-sm"
+                ? "bg-background text-amber-400 border-amber-500 shadow-sm"
                 : "text-muted-foreground hover:text-foreground border-transparent hover:bg-muted/20"
             )}
           >
@@ -113,7 +116,7 @@ export function IntegratedDock() {
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-t text-xs font-medium transition-colors border-b-2",
               activeDockTab === 'waveform' && !dockCollapsed
-                ? "bg-[#10131c] text-cyan-400 border-cyan-500 shadow-sm"
+                ? "bg-background text-cyan-400 border-cyan-500 shadow-sm"
                 : "text-muted-foreground hover:text-foreground border-transparent hover:bg-muted/20"
             )}
           >
@@ -129,6 +132,15 @@ export function IntegratedDock() {
 
         {/* Right Action Controls */}
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            onClick={toggleWaveformLayout}
+            title={waveformLayout === 'side-by-side' ? "Dock Waveform at Bottom" : "Split Waveform Side-by-Side"}
+          >
+            <Columns2 className="h-3 w-3 text-blue-500" />
+          </Button>
           {activeDockTab !== 'waveform' && (
             <Button
               variant="ghost"
@@ -165,7 +177,7 @@ export function IntegratedDock() {
 
       {/* Dock Content Body */}
       {!dockCollapsed && (
-        <div className="flex-1 min-h-0 bg-[#090b10] overflow-hidden">
+        <div className="flex-1 min-h-0 bg-background overflow-hidden">
           {activeDockTab === 'console' && <ConsoleOutput />}
           {activeDockTab === 'python' && <PythonOutput />}
           {activeDockTab === 'waveform' && <WaveformViewer />}

@@ -18,7 +18,7 @@ export function WelcomeScreen() {
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-[#0a0d14] text-foreground p-8 overflow-y-auto">
+    <div className="h-full flex flex-col items-center justify-center bg-background text-foreground p-8 overflow-y-auto">
       <div className="max-w-xl w-full space-y-6">
         {/* Header */}
         <div className="flex items-center justify-center gap-3">
@@ -32,13 +32,13 @@ export function WelcomeScreen() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground">
-          Integrated Digital Design environment powered by Icarus Verilog, Verilator, Python Verification, and Offline AI Assist.
+          Integrated Digital Design environment powered by Icarus Verilog, Verilator, Python Verification, and Offline HDL Assist.
         </p>
 
         {/* Quick Launch Interactive Demos */}
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+            <FileCode className="h-3.5 w-3.5 text-blue-500" />
             <span>Interactive Demo Projects</span>
           </div>
 
@@ -46,7 +46,7 @@ export function WelcomeScreen() {
             {/* Demo 1: Verilog */}
             <div 
               onClick={() => launchDemo('Counter_Waveform_Demo', '4-bit synchronous counter with VCD waveform dump', 'basic')}
-              className="p-3 rounded-lg border border-blue-500/30 bg-[#0d1017] hover:bg-blue-500/10 transition-colors cursor-pointer group"
+              className="p-3 rounded-lg border border-blue-500/30 bg-card hover:bg-blue-500/10 transition-colors cursor-pointer group"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-blue-400">Verilog Classic</span>
@@ -59,7 +59,7 @@ export function WelcomeScreen() {
             {/* Demo 2: SystemVerilog */}
             <div 
               onClick={() => launchDemo('SV_FIFO_Demo', 'Parameterized synchronous FIFO with SVA assertion', 'systemverilog_fifo')}
-              className="p-3 rounded-lg border border-purple-500/30 bg-[#0d1017] hover:bg-purple-500/10 transition-colors cursor-pointer group"
+              className="p-3 rounded-lg border border-purple-500/30 bg-card hover:bg-purple-500/10 transition-colors cursor-pointer group"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-purple-400">SystemVerilog</span>
@@ -72,7 +72,7 @@ export function WelcomeScreen() {
             {/* Demo 3: Python Verification */}
             <div 
               onClick={() => launchDemo('ALU_Python_Demo', '8-bit ALU with Python stimulus generator and checker', 'python_verification')}
-              className="p-3 rounded-lg border border-amber-500/30 bg-[#0d1017] hover:bg-amber-500/10 transition-colors cursor-pointer group"
+              className="p-3 rounded-lg border border-amber-500/30 bg-card hover:bg-amber-500/10 transition-colors cursor-pointer group"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-amber-400">Python Hub</span>
@@ -88,7 +88,7 @@ export function WelcomeScreen() {
         <div className="space-y-2 pt-1">
           <div 
             onClick={() => setIsNewProjectDialogOpen(true)}
-            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-[#0d1017] hover:bg-[#141926] transition-colors cursor-pointer"
+            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-card hover:bg-muted/60 transition-colors cursor-pointer"
           >
             <Plus className="h-5 w-5 text-blue-400 shrink-0" />
             <div className="text-left">
@@ -99,7 +99,7 @@ export function WelcomeScreen() {
 
           <div 
             onClick={openProjectFile}
-            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-[#0d1017] hover:bg-[#141926] transition-colors cursor-pointer"
+            className="flex items-center gap-3 p-3 rounded-lg border border-border/70 bg-card hover:bg-muted/60 transition-colors cursor-pointer"
           >
             <FolderOpen className="h-5 w-5 text-amber-400 shrink-0" />
             <div className="text-left">
@@ -120,7 +120,7 @@ export function WelcomeScreen() {
               href="https://www.chipverify.com/verilog/verilog-tutorial"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-[#0d1017] text-xs hover:bg-[#141926] transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
               <span className="truncate">Verilog / SV Tutorial</span>
@@ -129,7 +129,7 @@ export function WelcomeScreen() {
               href="https://verilator.org/guide/latest/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-[#0d1017] text-xs hover:bg-[#141926] transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
               <span className="truncate">Verilator Manual</span>
@@ -138,7 +138,7 @@ export function WelcomeScreen() {
               href="https://docs.cocotb.org/en/stable/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-[#0d1017] text-xs hover:bg-[#141926] transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-amber-400 shrink-0" />
               <span className="truncate">Cocotb Python Verification</span>
@@ -147,7 +147,7 @@ export function WelcomeScreen() {
               href="https://steveicarus.github.io/iverilog/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-[#0d1017] text-xs hover:bg-[#141926] transition-colors"
+              className="flex items-center gap-2 p-2 rounded-md border border-border/60 bg-card text-xs hover:bg-muted/60 transition-colors"
             >
               <ExternalLink className="h-3 w-3 text-blue-400 shrink-0" />
               <span className="truncate">Icarus Verilog Docs</span>

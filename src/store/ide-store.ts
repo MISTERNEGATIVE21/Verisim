@@ -98,6 +98,9 @@ interface IDEState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   isNewProjectDialogOpen: boolean;
   setIsNewProjectDialogOpen: (open: boolean) => void;
+  waveformLayout: 'dock' | 'side-by-side';
+  setWaveformLayout: (layout: 'dock' | 'side-by-side') => void;
+  toggleWaveformLayout: () => void;
 }
 
 export const useIDEStore = create<IDEState>((set, get) => ({
@@ -218,4 +221,9 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   isNewProjectDialogOpen: false,
   setIsNewProjectDialogOpen: (open) => set({ isNewProjectDialogOpen: open }),
+  waveformLayout: 'dock',
+  setWaveformLayout: (layout) => set({ waveformLayout: layout }),
+  toggleWaveformLayout: () => set((state) => ({
+    waveformLayout: state.waveformLayout === 'dock' ? 'side-by-side' : 'dock'
+  })),
 }));

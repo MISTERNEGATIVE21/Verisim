@@ -49,6 +49,8 @@ import {
   Download,
   Monitor,
   Cpu,
+  Wand2,
+  Columns2,
   Trash2,
   FolderOpen,
   Sparkles,
@@ -98,6 +100,8 @@ export function Toolbar() {
     isSimulating, 
     setSimulating,
     setSimulationResult,
+    waveformLayout,
+    toggleWaveformLayout,
     selectedEngine,
     setSelectedEngine,
     autoSuggestEnabled,
@@ -258,7 +262,7 @@ export function Toolbar() {
   const hasPython = currentProject?.files.some(f => f.name.endsWith('.py')) || false;
 
   return (
-    <div className="flex flex-col md:flex-row items-center justify-between px-3 py-1.5 gap-2 border-b border-border/70 bg-[#0a0d14] text-foreground select-none">
+    <div className="flex flex-col md:flex-row items-center justify-between px-3 py-1.5 gap-2 border-b border-border/70 bg-card text-foreground select-none">
       {/* Left Section - Logo and Project Selection */}
       <div className="flex items-center justify-between w-full md:w-auto gap-3">
         <div className="flex items-center gap-2">
@@ -301,7 +305,7 @@ export function Toolbar() {
               <span>New</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[440px] w-[95vw] sm:w-full bg-[#0d1017] border-border/80 text-foreground">
+          <DialogContent className="sm:max-w-[440px] w-[95vw] sm:w-full bg-card border-border/80 text-foreground">
             <DialogHeader>
               <DialogTitle>Create New EDA Project</DialogTitle>
               <DialogDescription>
@@ -317,7 +321,7 @@ export function Toolbar() {
                   onChange={(e) => setNewProjectName(e.target.value)}
                   placeholder="e.g. FIFO_Controller"
                   autoFocus
-                  className="bg-[#121622] border-border/60 text-xs"
+                  className="bg-background border-border/60 text-xs"
                 />
               </div>
               <div className="grid gap-1.5">
@@ -328,16 +332,16 @@ export function Toolbar() {
                   onChange={(e) => setNewProjectDesc(e.target.value)}
                   placeholder="Description of target architecture..."
                   rows={2}
-                  className="bg-[#121622] border-border/60 text-xs"
+                  className="bg-background border-border/60 text-xs"
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs">Template</Label>
                 <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                  <SelectTrigger className="bg-[#121622] border-border/60 text-xs">
+                  <SelectTrigger className="bg-background border-border/60 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#121622] border-border/80 text-xs">
+                  <SelectContent className="bg-background border-border/80 text-xs">
                     {PROJECT_TEMPLATES.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
                         <div className="flex flex-col text-left py-0.5">
@@ -383,11 +387,11 @@ export function Toolbar() {
           value={selectedEngine} 
           onValueChange={(val) => setSelectedEngine(val as SimulationEngine)}
         >
-          <SelectTrigger className="h-7 text-xs w-[145px] shrink-0 bg-[#121622] border-border/60 font-medium">
+          <SelectTrigger className="h-7 text-xs w-[145px] shrink-0 bg-background border-border/60 font-medium">
             <Cpu className="h-3.5 w-3.5 mr-1 text-blue-400" />
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#121622] border-border/80 text-xs">
+          <SelectContent className="bg-background border-border/80 text-xs">
             <SelectItem value="iverilog">Icarus (-g2012)</SelectItem>
             <SelectItem value="verilator">Verilator Lint</SelectItem>
           </SelectContent>
@@ -438,35 +442,52 @@ export function Toolbar() {
 
         <div className="h-4 w-[1px] bg-border/40 mx-1 hidden sm:block" />
 
-        {/* Auto-Suggestion Pill Toggle */}
+        {/* Waveform Layout Toggle (Side-by-Side vs Dock) */}
+        {currentProject && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-7 px-2 text-xs shrink-0 border-border/60",
+              waveformLayout === 'side-by-side' ? "bg-blue-500/10 text-blue-500 border-blue-500/30" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={toggleWaveformLayout}
+            title="Toggle Side-by-Side Waveform Split (Ctrl+Alt+W)"
+          >
+            <Columns2 className="h-3.5 w-3.5 mr-1 text-blue-500" />
+            <span className="hidden sm:inline">{waveformLayout === 'side-by-side' ? 'Side Waveform' : 'Dock Waveform'}</span>
+          </Button>
+        )}
+
+        {/* Code Suggestions Pill Toggle */}
         <button
           onClick={toggleAutoSuggest}
           className={cn(
             "flex items-center gap-1.5 h-7 px-2 rounded border text-xs font-medium shrink-0 transition-colors",
             autoSuggestEnabled 
-              ? "bg-blue-500/10 text-blue-400 border-blue-500/40 hover:bg-blue-500/20" 
+              ? "bg-blue-500/10 text-blue-500 border-blue-500/40 hover:bg-blue-500/20" 
               : "bg-muted/20 text-muted-foreground border-border/40 hover:bg-muted/40"
           )}
-          title="Toggle Auto-Suggestions (Alt+A)"
+          title="Toggle Code Snippets (Alt+A)"
         >
-          <Sparkles className="h-3 w-3 text-blue-400" />
-          <span className="hidden sm:inline">Auto-Suggest:</span>
+          <Zap className="h-3 w-3 text-amber-500" />
+          <span className="hidden sm:inline">Assist:</span>
           <span>{autoSuggestEnabled ? 'ON' : 'OFF'}</span>
         </button>
 
-        {/* AI Studio Drawer Trigger */}
+        {/* HDL Design Assistant Trigger */}
         <Button
           variant={isAiAssistOpen ? "default" : "outline"}
           size="sm"
           className={cn(
             "h-7 px-2 text-xs shrink-0 border-border/60",
-            isAiAssistOpen ? "bg-purple-600 hover:bg-purple-700 text-white" : "hover:text-purple-400"
+            isAiAssistOpen ? "bg-blue-600 hover:bg-blue-700 text-white" : "hover:text-blue-500"
           )}
           onClick={toggleAiAssist}
-          title="Toggle AI Assist Studio"
+          title="Toggle HDL Design & Testbench Assistant"
         >
-          <Sparkles className="h-3.5 w-3.5 mr-1 text-purple-400" />
-          <span className="hidden sm:inline">AI Studio</span>
+          <Wand2 className="h-3.5 w-3.5 mr-1 text-blue-500" />
+          <span className="hidden sm:inline">HDL Assistant</span>
         </Button>
       </div>
 
@@ -479,7 +500,7 @@ export function Toolbar() {
               <Settings2 className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-[#121622] border-border/80 text-xs w-52">
+          <DropdownMenuContent align="end" className="bg-background border-border/80 text-xs w-52">
             <DropdownMenuLabel>Highlight Options</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border/40" />
             <DropdownMenuCheckboxItem
@@ -514,7 +535,7 @@ export function Toolbar() {
               <span>Docs</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[700px] w-[95vw] sm:w-full max-h-[85vh] overflow-y-auto bg-[#0d1017] border-border/80 text-foreground">
+          <DialogContent className="sm:max-w-[700px] w-[95vw] sm:w-full max-h-[85vh] overflow-y-auto bg-card border-border/80 text-foreground">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-blue-400" />
@@ -566,7 +587,7 @@ export function Toolbar() {
                 </h4>
                 <div className="grid grid-cols-2 gap-2">
                   {KEYBOARD_SHORTCUTS.map((shortcut, i) => (
-                    <div key={i} className="flex items-center justify-between p-1.5 bg-[#121622] rounded border border-border/40">
+                    <div key={i} className="flex items-center justify-between p-1.5 bg-background rounded border border-border/40">
                       <span className="text-muted-foreground">{shortcut.action}</span>
                       <div className="flex gap-1">
                         {shortcut.keys.map((key, j) => (

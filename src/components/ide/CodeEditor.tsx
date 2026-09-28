@@ -148,6 +148,7 @@ function createHDLTokensProvider(highlightPrimitives: boolean, highlightSystemTa
 }
 
 export function CodeEditor() {
+  const { resolvedTheme } = useTheme();
   const { 
     activeFile, 
     openFiles, 
@@ -203,6 +204,25 @@ export function CodeEditor() {
         'editor.lineHighlightBackground': '#181d2a',
         'editorLineNumber.foreground': '#4f5d75',
         'editorLineNumber.activeForeground': '#60a5fa',
+      }
+    });
+
+    monaco.editor.defineTheme('verisim-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '0000ff', fontStyle: 'bold' },
+        { token: 'type.primitive', foreground: highlightPrimitives ? '008080' : '267f99', fontStyle: highlightPrimitives ? 'italic' : 'normal' },
+        { token: 'type.identifier', foreground: highlightSystemTasks ? '795e26' : '001080' },
+        { token: 'number.hex', foreground: '098658' },
+        { token: 'operator', foreground: '000000' },
+        { token: 'comment', foreground: '008000', fontStyle: 'italic' },
+      ],
+      colors: {
+        'editor.background': '#ffffff',
+        'editor.lineHighlightBackground': '#f3f4f6',
+        'editorLineNumber.foreground': '#9ca3af',
+        'editorLineNumber.activeForeground': '#2563eb',
       }
     });
 
@@ -409,9 +429,9 @@ export function CodeEditor() {
   const activeLanguage = getLanguageForFile(activeFile.name);
 
   return (
-    <div className="h-full flex flex-col bg-[#10131c]">
+    <div className="h-full flex flex-col bg-background">
       {/* Tab Bar */}
-      <div className="flex items-center bg-[#0d1017] border-b border-border/60 overflow-x-auto select-none no-scrollbar">
+      <div className="flex items-center bg-muted/40 border-b border-border/60 overflow-x-auto select-none no-scrollbar">
         {openFiles.map((file) => {
           const isActive = activeFile.id === file.id;
           return (
@@ -420,8 +440,8 @@ export function CodeEditor() {
               className={cn(
                 "group flex items-center gap-2 px-3 py-2 border-r border-border/40 cursor-pointer min-w-max text-xs transition-colors",
                 isActive 
-                  ? "bg-[#10131c] text-foreground font-medium border-t-2 border-t-blue-500 shadow-sm" 
-                  : "bg-transparent text-muted-foreground hover:bg-[#141824] hover:text-foreground"
+                  ? "bg-background text-foreground font-medium border-t-2 border-t-blue-500 shadow-sm" 
+                  : "bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               )}
               onClick={() => setActiveFile(file)}
             >
@@ -465,9 +485,9 @@ export function CodeEditor() {
           height="100%"
           language={activeLanguage}
           value={activeFile.content}
-          theme="verisim-dark"
+          theme={resolvedTheme === "light" ? "verisim-light" : "verisim-dark"}
           loading={
-            <div className="h-full flex items-center justify-center bg-[#10131c] text-muted-foreground text-xs gap-2">
+            <div className="h-full flex items-center justify-center bg-background text-muted-foreground text-xs gap-2">
               <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
               <span>Loading Monaco Editor...</span>
             </div>

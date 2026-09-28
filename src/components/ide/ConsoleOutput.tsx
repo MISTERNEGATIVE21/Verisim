@@ -133,7 +133,7 @@ export function ConsoleOutput() {
 
               {/* Output */}
               {simulationResult.output && (
-                <pre className="bg-zinc-900 text-green-400 p-4 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap text-xs leading-relaxed">
+                <pre className="bg-card border border-border text-emerald-600 dark:text-emerald-400 p-4 rounded-md text-sm font-mono overflow-x-auto whitespace-pre-wrap text-xs leading-relaxed">
                   {simulationResult.output}
                 </pre>
               )}

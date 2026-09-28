@@ -89,9 +89,9 @@ export function PythonOutput({ showHeader = false }: PythonOutputProps) {
   const pyFiles = currentProject?.files.filter(f => f.name.endsWith('.py')) || [];
 
   return (
-    <div className="h-full flex flex-col bg-[#090c14] text-foreground">
+    <div className="h-full flex flex-col bg-background text-foreground">
       {showHeader && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40 bg-[#0d1017]">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40 bg-card">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-amber-400">Python Verification Hub</span>
             {isPythonRunning && (
@@ -172,7 +172,7 @@ export function PythonOutput({ showHeader = false }: PythonOutputProps) {
 
           {pythonResult && !isPythonRunning && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between bg-[#121622] px-3 py-1.5 rounded border border-border/40 text-xs">
+              <div className="flex items-center justify-between bg-muted/40 px-3 py-1.5 rounded border border-border/40 text-xs">
                 <div className="flex items-center gap-2">
                   {pythonResult.success ? (
                     <span className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
@@ -200,7 +200,7 @@ export function PythonOutput({ showHeader = false }: PythonOutputProps) {
                 )}
               </div>
 
-              <pre className="p-3 rounded bg-black/60 border border-border/40 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed text-zinc-300">
+              <pre className="p-3 rounded bg-card border border-border text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed text-foreground">
                 {pythonResult.output}
               </pre>
             </div>

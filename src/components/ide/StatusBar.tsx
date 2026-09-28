@@ -24,7 +24,7 @@ export function StatusBar() {
   };
 
   return (
-    <footer className="h-6 bg-[#080a0f] border-t border-border/40 px-3 flex items-center justify-between text-[11px] text-muted-foreground select-none z-20">
+    <footer className="h-6 bg-card border-t border-border px-3 flex items-center justify-between text-[11px] text-muted-foreground select-none z-20">
       {/* Left items */}
       <div className="flex items-center gap-3">
         {/* Engine status */}
@@ -76,10 +76,10 @@ export function StatusBar() {
               ? "text-blue-400 bg-blue-500/10 hover:bg-blue-500/20" 
               : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
           )}
-          title="Toggle Auto-Suggestions (Alt+A)"
+          title="Toggle Code Suggestions (Alt+A)"
         >
-          <Sparkles className="h-2.5 w-2.5" />
-          <span>Auto-Suggest: {autoSuggestEnabled ? 'ON' : 'OFF'}</span>
+          <span className="text-[10px]">⚡</span>
+          <span>Code Assist: {autoSuggestEnabled ? 'ON' : 'OFF'}</span>
         </button>
 
         <span className="text-border/60">|</span>
@@ -90,12 +90,12 @@ export function StatusBar() {
           className={cn(
             "flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors text-[10px] font-medium",
             isAiAssistOpen 
-              ? "text-purple-400 bg-purple-500/10 hover:bg-purple-500/20" 
+              ? "text-blue-500 bg-blue-500/10 hover:bg-blue-500/20" 
               : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
           )}
           title="Toggle AI Assist Studio"
         >
-          <span>AI Studio</span>
+          <span>HDL Assistant</span>
         </button>
       </div>
     </footer>

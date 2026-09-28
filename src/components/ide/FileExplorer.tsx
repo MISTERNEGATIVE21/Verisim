@@ -277,7 +277,7 @@ endmodule`;
   );
 
   return (
-    <div className="h-full flex flex-col bg-[#0d1017] border-r border-border/60 text-foreground select-none">
+    <div className="h-full flex flex-col bg-card border-r border-border/60 text-foreground select-none">
       <div className="p-2 border-b border-border/50 flex items-center justify-between">
         <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
           Project Files
@@ -418,7 +418,7 @@ endmodule`;
 
       {/* New File Dialog */}
       <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
-        <DialogContent className="sm:max-w-[400px] bg-[#0d1017] border-border/80 text-foreground">
+        <DialogContent className="sm:max-w-[400px] bg-card border-border/80 text-foreground">
           <DialogHeader>
             <DialogTitle>Create New File</DialogTitle>
           </DialogHeader>
@@ -426,10 +426,10 @@ endmodule`;
             <div className="grid gap-1.5">
               <Label>File Type</Label>
               <Select value={newFileType} onValueChange={setNewFileType}>
-                <SelectTrigger className="bg-[#121622] border-border/60 text-xs">
+                <SelectTrigger className="bg-background border-border/60 text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#121622] border-border/80 text-xs">
+                <SelectContent className="bg-background border-border/80 text-xs">
                   <SelectItem value="systemverilog">SystemVerilog (.sv)</SelectItem>
                   <SelectItem value="verilog">Verilog (.v)</SelectItem>
                   <SelectItem value="python">Python Script (.py)</SelectItem>
@@ -453,7 +453,7 @@ endmodule`;
                 }
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') createFile(); }}
-                className="bg-[#121622] border-border/60 text-xs"
+                className="bg-background border-border/60 text-xs"
               />
             </div>
           </div>
@@ -470,7 +470,7 @@ endmodule`;
 
       {/* Rename Dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="sm:max-w-[400px] bg-[#0d1017] border-border/80 text-foreground">
+        <DialogContent className="sm:max-w-[400px] bg-card border-border/80 text-foreground">
           <DialogHeader>
             <DialogTitle>Rename File</DialogTitle>
           </DialogHeader>
@@ -483,7 +483,7 @@ endmodule`;
                 onChange={(e) => setRenameValue(e.target.value)}
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') renameFile(); }}
-                className="bg-[#121622] border-border/60 text-xs"
+                className="bg-background border-border/60 text-xs"
               />
             </div>
           </div>
@@ -515,8 +515,8 @@ function FileItem({ file, isActive, onClick, onRename, onDelete, icon }: FileIte
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-2 py-1 text-xs w-full text-left rounded hover:bg-[#151a27] group cursor-pointer transition-colors",
-        isActive ? "bg-[#181e2e] text-blue-400 font-medium" : "text-muted-foreground hover:text-foreground"
+        "flex items-center gap-2 px-2 py-1 text-xs w-full text-left rounded hover:bg-muted/60 group cursor-pointer transition-colors",
+        isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground"
       )}
     >
       {icon}

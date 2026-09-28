@@ -344,16 +344,16 @@ end`;
   const fsmCode = generateFSMCode();
 
   return (
-    <div className="w-80 h-full border-l border-border bg-[#0d1017] flex flex-col z-30 shadow-xl">
+    <div className="w-80 h-full border-l border-border bg-card flex flex-col z-30 shadow-xl">
       {/* Header */}
-      <div className="p-3 border-b border-border/60 flex items-center justify-between bg-[#10131c]">
+      <div className="p-3 border-b border-border/60 flex items-center justify-between bg-card">
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
-            <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+            <Wand2 className="h-3.5 w-3.5 text-blue-500" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-foreground">AI Assist Studio</h3>
-            <p className="text-[10px] text-muted-foreground">Offline Hardware Copilot</p>
+            <h3 className="text-xs font-bold text-foreground">HDL Design Assistant</h3>
+            <p className="text-[10px] text-muted-foreground">Offline Hardware Generator</p>
           </div>
         </div>
         <Button 
@@ -367,7 +367,7 @@ end`;
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-4 p-1.5 gap-1 bg-[#090b10] border-b border-border/40 text-[11px]">
+      <div className="grid grid-cols-4 p-1.5 gap-1 bg-muted/40 border-b border-border/40 text-[11px]">
         <button
           onClick={() => setActiveTab('tb')}
           className={cn(
@@ -458,7 +458,7 @@ end`;
 
                 <div className="pt-2">
                   <span className="text-[11px] text-muted-foreground font-medium">Generated Preview:</span>
-                  <pre className="mt-1 p-2 rounded bg-black/40 border border-border/40 text-[10px] font-mono overflow-x-auto max-h-48 text-muted-foreground leading-normal">
+                  <pre className="mt-1 p-2 rounded bg-muted/30 border border-border/40 text-[10px] font-mono overflow-x-auto max-h-48 text-muted-foreground leading-normal">
                     {testbenchCode}
                   </pre>
                 </div>
@@ -560,7 +560,7 @@ end`;
                     {copiedCode === 'fsm' ? 'Copied!' : 'Copy'}
                   </Button>
                 </div>
-                <pre className="p-2 rounded bg-black/40 border border-border/40 text-[10px] font-mono overflow-x-auto max-h-48 text-muted-foreground leading-normal">
+                <pre className="p-2 rounded bg-muted/30 border border-border/40 text-[10px] font-mono overflow-x-auto max-h-48 text-muted-foreground leading-normal">
                   {fsmCode}
                 </pre>
               </div>
@@ -617,7 +617,7 @@ end`;
             {lintFindings.length > 0 ? (
               <div className="space-y-2">
                 {lintFindings.map((finding, idx) => (
-                  <div key={idx} className="p-2.5 rounded bg-black/40 border border-amber-500/30 space-y-1.5">
+                  <div key={idx} className="p-2.5 rounded bg-muted/30 border border-amber-500/30 space-y-1.5">
                     <div className="flex items-center gap-1.5 text-amber-400 font-medium text-xs">
                       <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                       <span>{finding.title}</span>
