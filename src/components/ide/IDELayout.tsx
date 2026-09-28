@@ -1,7 +1,9 @@
 'use client';
 
 import { Toolbar } from './Toolbar';
+import { ActivityBar } from './ActivityBar';
 import { FileExplorer } from './FileExplorer';
+import { SynthesisViewer } from './SynthesisViewer';
 import { CodeEditor } from './CodeEditor';
 import { IntegratedDock } from './IntegratedDock';
 import { WaveformViewer } from './WaveformViewer';
@@ -20,6 +22,7 @@ export function IDELayout() {
     currentProject, 
     sidebarCollapsed, 
     setSidebarCollapsed,
+    activeActivityTab,
     isAiAssistOpen,
     dockCollapsed,
     dockMaximized,
@@ -71,22 +74,33 @@ export function IDELayout() {
           />
         )}
 
-        {/* Sidebar - File Explorer */}
+        {/* VS Code Style Activity Bar */}
+        <ActivityBar />
+
+        {/* Sidebar Drawer */}
         <div className={cn(
-          "bg-card border-r border-border/70 transition-all duration-300 z-40",
-          isMobile ? "fixed inset-y-0 left-0 w-64 translate-x-0" : "relative flex-shrink-0",
+          "bg-card border-r border-border/70 transition-all duration-300 z-40 flex flex-col",
+          isMobile ? "fixed inset-y-0 left-12 w-72 translate-x-0" : "relative flex-shrink-0",
           sidebarCollapsed && isMobile ? "-translate-x-full" : "",
-          sidebarCollapsed && !isMobile ? "w-0 overflow-hidden border-none" : "w-64"
+          sidebarCollapsed && !isMobile ? "w-0 overflow-hidden border-none" : (activeActivityTab === 'synth' ? "w-80" : "w-64")
         )}>
           {isMobile && (
             <div className="p-2 border-b border-border flex justify-between items-center bg-muted/30">
-              <span className="font-bold text-xs">Project Explorer</span>
+              <span className="font-bold text-xs">
+                {activeActivityTab === 'files' && 'Project Explorer'}
+                {activeActivityTab === 'synth' && 'RTL Gate Synthesis'}
+                {activeActivityTab === 'ai' && 'HDL Assistant Studio'}
+              </span>
               <Button variant="ghost" size="sm" onClick={() => setSidebarCollapsed(true)}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
           )}
-          <FileExplorer />
+          <div className="flex-1 overflow-hidden">
+            {activeActivityTab === 'files' && <FileExplorer />}
+            {activeActivityTab === 'synth' && <SynthesisViewer variant="drawer" />}
+            {activeActivityTab === 'ai' && <AIAssistStudio drawerMode={true} />}
+          </div>
         </div>
 
         {/* Toggle Button for Mobile */}
@@ -94,7 +108,7 @@ export function IDELayout() {
           <Button 
             variant="outline" 
             size="icon" 
-            className="fixed bottom-8 left-4 z-50 rounded-full shadow-xl h-10 w-10 border-blue-500/50 bg-card"
+            className="fixed bottom-8 left-16 z-50 rounded-full shadow-xl h-10 w-10 border-blue-500/50 bg-card"
             onClick={() => setSidebarCollapsed(false)}
           >
             <Menu className="h-5 w-5 text-blue-400" />
@@ -132,7 +146,7 @@ export function IDELayout() {
                       <CodeEditor />
                     )}
                   </div>
-                  {isAiAssistOpen && (
+                  {isAiAssistOpen && activeActivityTab !== 'ai' && (
                     <AIAssistStudio />
                   )}
                 </div>

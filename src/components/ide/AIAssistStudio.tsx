@@ -31,7 +31,11 @@ interface ParsedPort {
   name: string;
 }
 
-export function AIAssistStudio() {
+interface AIAssistStudioProps {
+  drawerMode?: boolean;
+}
+
+export function AIAssistStudio({ drawerMode = false }: AIAssistStudioProps = {}) {
   const { 
     isAiAssistOpen, 
     toggleAiAssist, 
@@ -49,7 +53,7 @@ export function AIAssistStudio() {
   const [fsmStates, setFsmStates] = useState<'3' | '4'>('3');
   const [fsmStyle, setFsmStyle] = useState<'sv' | 'v'>('sv');
 
-  if (!isAiAssistOpen) return null;
+  if (!isAiAssistOpen && !drawerMode) return null;
 
   const copyText = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -344,7 +348,7 @@ end`;
   const fsmCode = generateFSMCode();
 
   return (
-    <div className="w-80 h-full border-l border-border bg-card flex flex-col z-30 shadow-xl">
+    <div className={cn(drawerMode ? "w-full border-none shadow-none" : "w-80 border-l border-border shadow-xl", "h-full bg-card flex flex-col z-30")}>
       {/* Header */}
       <div className="p-3 border-b border-border/60 flex items-center justify-between bg-card">
         <div className="flex items-center gap-2">
