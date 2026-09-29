@@ -98,9 +98,23 @@ export function CommandPalette({
     setActiveDockTab,
     setIsToolchainModalOpen,
     setIsNewProjectDialogOpen,
+    isNewFileDialogOpen,
+    setIsNewFileDialogOpen,
+    isDocsOpen,
+    setIsDocsOpen,
+    isAboutOpen,
+    setIsAboutOpen,
+    isKeyboardShortcutsOpen,
+    setIsKeyboardShortcutsOpen,
+    isSimulating,
+    setSimulating,
     setSimulationResult,
-    setPythonResult,
+    isSynthesizing,
+    setSynthesizing,
     setSynthesisResult,
+    isPythonRunning,
+    setPythonRunning,
+    setPythonResult,
     autoSuggestEnabled,
     toggleAutoSuggest,
     highlightPrimitives,
@@ -449,8 +463,12 @@ export function CommandPalette({
                 onSelect={() => {
                   if (onNewFile) handleAction(onNewFile);
                   else {
+                    if (currentProject) {
+                      setIsNewFileDialogOpen(true);
+                    } else {
+                      toast.info('Open or create a project first');
+                    }
                     onOpenChange(false);
-                    toast.info('Use File > New File in titlebar');
                   }
                 }}
                 className="flex items-center justify-between cursor-pointer data-[selected=true]:bg-blue-600 data-[selected=true]:text-white rounded-sm"
@@ -668,7 +686,13 @@ export function CommandPalette({
 
               <CommandItem
                 value="Open Documentation Manual Verisim Guide"
-                onSelect={() => handleAction(onOpenDocs)}
+                onSelect={() => {
+                  if (onOpenDocs) handleAction(onOpenDocs);
+                  else {
+                    setIsDocsOpen(true);
+                    onOpenChange(false);
+                  }
+                }}
                 className="flex items-center justify-between cursor-pointer data-[selected=true]:bg-blue-600 data-[selected=true]:text-white rounded-sm"
               >
                 <div className="flex items-center gap-2">
@@ -679,7 +703,13 @@ export function CommandPalette({
 
               <CommandItem
                 value="Keyboard Shortcuts Reference"
-                onSelect={() => handleAction(onOpenDocs)}
+                onSelect={() => {
+                  if (onOpenDocs) handleAction(onOpenDocs);
+                  else {
+                    setIsDocsOpen(true);
+                    onOpenChange(false);
+                  }
+                }}
                 className="flex items-center justify-between cursor-pointer data-[selected=true]:bg-blue-600 data-[selected=true]:text-white rounded-sm"
               >
                 <div className="flex items-center gap-2">
@@ -690,7 +720,13 @@ export function CommandPalette({
 
               <CommandItem
                 value="About Verisim IDE Version Info"
-                onSelect={() => handleAction(onOpenAbout)}
+                onSelect={() => {
+                  if (onOpenAbout) handleAction(onOpenAbout);
+                  else {
+                    setIsAboutOpen(true);
+                    onOpenChange(false);
+                  }
+                }}
                 className="flex items-center justify-between cursor-pointer data-[selected=true]:bg-blue-600 data-[selected=true]:text-white rounded-sm"
               >
                 <div className="flex items-center gap-2">

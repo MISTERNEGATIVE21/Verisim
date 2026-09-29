@@ -170,6 +170,14 @@ interface IDEState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   isNewProjectDialogOpen: boolean;
   setIsNewProjectDialogOpen: (open: boolean) => void;
+  isNewFileDialogOpen: boolean;
+  setIsNewFileDialogOpen: (open: boolean) => void;
+  isDocsOpen: boolean;
+  setIsDocsOpen: (open: boolean) => void;
+  isAboutOpen: boolean;
+  setIsAboutOpen: (open: boolean) => void;
+  isKeyboardShortcutsOpen: boolean;
+  setIsKeyboardShortcutsOpen: (open: boolean) => void;
   waveformLayout: 'dock' | 'side-by-side';
   setWaveformLayout: (layout: 'dock' | 'side-by-side') => void;
   toggleWaveformLayout: () => void;
@@ -319,6 +327,14 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   isNewProjectDialogOpen: false,
   setIsNewProjectDialogOpen: (open) => set({ isNewProjectDialogOpen: open }),
+  isNewFileDialogOpen: false,
+  setIsNewFileDialogOpen: (open) => set({ isNewFileDialogOpen: open }),
+  isDocsOpen: false,
+  setIsDocsOpen: (open) => set({ isDocsOpen: open }),
+  isAboutOpen: false,
+  setIsAboutOpen: (open) => set({ isAboutOpen: open }),
+  isKeyboardShortcutsOpen: false,
+  setIsKeyboardShortcutsOpen: (open) => set({ isKeyboardShortcutsOpen: open }),
   waveformLayout: 'dock',
   setWaveformLayout: (layout) => set({ waveformLayout: layout }),
   toggleWaveformLayout: () => set((state) => ({

@@ -57,6 +57,28 @@ describe("VSCodium Titlebar & Command Palette State", () => {
     expect(useIDEStore.getState().isNewProjectDialogOpen).toBe(false);
   });
 
+  it("manages shared modal triggers for Docs, About, and New File", () => {
+    const store = useIDEStore.getState();
+    expect(store.isDocsOpen).toBe(false);
+    expect(store.isAboutOpen).toBe(false);
+    expect(store.isNewFileDialogOpen).toBe(false);
+
+    store.setIsDocsOpen(true);
+    expect(useIDEStore.getState().isDocsOpen).toBe(true);
+    store.setIsDocsOpen(false);
+    expect(useIDEStore.getState().isDocsOpen).toBe(false);
+
+    store.setIsAboutOpen(true);
+    expect(useIDEStore.getState().isAboutOpen).toBe(true);
+    store.setIsAboutOpen(false);
+    expect(useIDEStore.getState().isAboutOpen).toBe(false);
+
+    store.setIsNewFileDialogOpen(true);
+    expect(useIDEStore.getState().isNewFileDialogOpen).toBe(true);
+    store.setIsNewFileDialogOpen(false);
+    expect(useIDEStore.getState().isNewFileDialogOpen).toBe(false);
+  });
+
   it("manages quick file open and active file selection in project", () => {
     const store = useIDEStore.getState();
 

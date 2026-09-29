@@ -147,6 +147,7 @@ export function VSCodiumTitlebar({
     setPythonRunning,
     setPythonResult,
     setActiveDockTab,
+    setActiveActivityTab,
     dockCollapsed,
     setDockCollapsed,
     sidebarCollapsed,
@@ -154,12 +155,17 @@ export function VSCodiumTitlebar({
     setIsToolchainModalOpen,
     isNewProjectDialogOpen,
     setIsNewProjectDialogOpen,
+    isNewFileDialogOpen,
+    setIsNewFileDialogOpen,
+    isDocsOpen,
+    setIsDocsOpen,
+    isAboutOpen,
+    setIsAboutOpen,
+    isKeyboardShortcutsOpen,
+    setIsKeyboardShortcutsOpen,
   } = useIDEStore();
 
-  // Dialog states
-  const [docsOpen, setDocsOpen] = React.useState(false);
-  const [aboutOpen, setAboutOpen] = React.useState(false);
-  const [newFileOpen, setNewFileOpen] = React.useState(false);
+  // Dialog form states
   const [newFileName, setNewFileName] = React.useState('');
   const [newFileType, setNewFileType] = React.useState('systemverilog');
 
@@ -402,7 +408,7 @@ export function VSCodiumTitlebar({
     setActiveFile(newFile);
     toast.success(`Created file ${name}`);
 
-    setNewFileOpen(false);
+    setIsNewFileDialogOpen(false);
     setNewFileName('');
   };
 
@@ -437,12 +443,12 @@ export function VSCodiumTitlebar({
 
   const openDocsModal = () => {
     if (externalOpenDocs) externalOpenDocs();
-    else setDocsOpen(true);
+    setIsDocsOpen(true);
   };
 
   const openAboutModal = () => {
     if (externalOpenAbout) externalOpenAbout();
-    else setAboutOpen(true);
+    setIsAboutOpen(true);
   };
 
   const hasPython = currentProject?.files.some((f) => f.name.endsWith('.py')) || false;
@@ -474,7 +480,7 @@ export function VSCodiumTitlebar({
             <MenubarContent className="bg-[#252526] text-[#cccccc] border-[#333333] text-xs py-1 min-w-[13rem] shadow-xl">
               <MenubarItem
                 onClick={() => {
-                  if (currentProject) setNewFileOpen(true);
+                  if (currentProject) setIsNewFileDialogOpen(true);
                   else toast.info('Open or create a project first');
                 }}
                 className="cursor-pointer focus:bg-blue-600 focus:text-white"
@@ -1126,7 +1132,7 @@ export function VSCodiumTitlebar({
       </Dialog>
 
       {/* New File Dialog */}
-      <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
+      <Dialog open={isNewFileDialogOpen} onOpenChange={setIsNewFileDialogOpen}>
         <DialogContent className="sm:max-w-[400px] w-[95vw] sm:w-full bg-[#252526] border-[#333333] text-[#cccccc]">
           <DialogHeader>
             <DialogTitle className="text-white">Create New File</DialogTitle>
@@ -1172,7 +1178,7 @@ export function VSCodiumTitlebar({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setNewFileOpen(false)}
+              onClick={() => setIsNewFileDialogOpen(false)}
             >
               Cancel
             </Button>
@@ -1189,7 +1195,7 @@ export function VSCodiumTitlebar({
       </Dialog>
 
       {/* Documentation Dialog */}
-      <Dialog open={docsOpen} onOpenChange={setDocsOpen}>
+      <Dialog open={isDocsOpen} onOpenChange={setIsDocsOpen}>
         <DialogContent className="sm:max-w-[700px] w-[95vw] sm:w-full max-h-[85vh] overflow-y-auto bg-[#252526] border-[#333333] text-[#cccccc]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
@@ -1264,7 +1270,7 @@ export function VSCodiumTitlebar({
       </Dialog>
 
       {/* About Verisim Dialog */}
-      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+      <Dialog open={isAboutOpen} onOpenChange={setIsAboutOpen}>
         <DialogContent className="sm:max-w-[420px] w-[95vw] sm:w-full bg-[#252526] border-[#333333] text-[#cccccc]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
@@ -1288,7 +1294,7 @@ export function VSCodiumTitlebar({
               type="button"
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={() => setAboutOpen(false)}
+              onClick={() => setIsAboutOpen(false)}
             >
               OK
             </Button>
