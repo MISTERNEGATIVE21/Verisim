@@ -360,9 +360,9 @@ fi
 
 # Ensure yosys-abc symlink exists
 if [[ -f "$DEST_DIR/bin/abc" && ! -e "$DEST_DIR/bin/yosys-abc" ]]; then
-    ln -s abc "$DEST_DIR/bin/yosys-abc"
+    ln -sf abc "$DEST_DIR/bin/yosys-abc"
 elif [[ -f "$DEST_DIR/bin/yosys-abc" && ! -e "$DEST_DIR/bin/abc" ]]; then
-    ln -s yosys-abc "$DEST_DIR/bin/abc"
+    ln -sf yosys-abc "$DEST_DIR/bin/abc"
 fi
 
 # Ensure executable and read permissions
