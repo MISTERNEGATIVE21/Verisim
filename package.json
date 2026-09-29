@@ -16,6 +16,7 @@
     "tauri": "tauri",
     "desktop": "./src-tauri/target/release/app",
     "desktop:dev": "tauri dev",
+    "fetch:toolchain": "bash scripts/fetch-oss-cad-suite.sh",
     "build:appimage": "NO_STRIP=true LD_LIBRARY_PATH=\"$PWD/src-tauri/toolchain/lib:$LD_LIBRARY_PATH\" tauri build --bundles appimage",
     "appimage": "sh -c './src-tauri/target/release/bundle/appimage/verisim-ide_*.AppImage'",
     "bump": "node scripts/bump-version.mjs"
