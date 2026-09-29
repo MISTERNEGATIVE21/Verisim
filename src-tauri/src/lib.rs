@@ -194,10 +194,16 @@ pub fn configure_tool_cmd(
         cmd.env("PATH", new_path);
 
         let current_ld = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        let new_ld = if current_ld.is_empty() {
-            format!("{}", lib_dir.display())
+        let ivl_dir = lib_dir.join("ivl");
+        let lib_paths = if ivl_dir.exists() {
+            format!("{}:{}", lib_dir.display(), ivl_dir.display())
         } else {
-            format!("{}:{}", lib_dir.display(), current_ld)
+            format!("{}", lib_dir.display())
+        };
+        let new_ld = if current_ld.is_empty() {
+            lib_paths
+        } else {
+            format!("{}:{}", lib_paths, current_ld)
         };
         cmd.env("LD_LIBRARY_PATH", new_ld);
 
@@ -387,6 +393,10 @@ async fn open_in_gtkwave(
     vcd_path: String,
     toolchain: Option<ToolchainConfig>,
 ) -> Result<String, String> {
+    if !Path::new(&vcd_path).exists() {
+        return Err(format!("VCD waveform file not found at '{}'", vcd_path));
+    }
+
     let tc = toolchain.unwrap_or_default();
     let bundled_dir = find_bundled_toolchain_dir(Some(&app));
     let gtkwave_bin = resolve_gtkwave_binary(
@@ -1362,5 +1372,24 @@ endmodule
         let health = check_toolchain_internal(None, None).unwrap();
         let serialized = serde_json::to_string(&health).unwrap();
         assert!(serialized.contains("\"gtkwave\":"));
+    }
+
+    #[test]
+    fn test_configure_tool_cmd_ld_library_path() {
+        let temp_dir = std::env::temp_dir().join(format!("test_cfg_cmd_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let ivl_dir = temp_dir.join("lib/ivl");
+        fs::create_dir_all(&ivl_dir).unwrap();
+
+        let mut cmd = Command::new("dummy");
+        configure_tool_cmd(&mut cmd, Some(&temp_dir));
+
+        let envs: Vec<(&std::ffi::OsStr, Option<&std::ffi::OsStr>)> = cmd.get_envs().collect();
+        let ld_entry = envs.iter().find(|(k, _)| *k == "LD_LIBRARY_PATH");
+        assert!(ld_entry.is_some());
+        let ld_val = ld_entry.unwrap().1.unwrap().to_string_lossy();
+        assert!(ld_val.contains(&temp_dir.join("lib").display().to_string()));
+        assert!(ld_val.contains(&ivl_dir.display().to_string()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
