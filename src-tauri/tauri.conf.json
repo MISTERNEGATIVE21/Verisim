@@ -31,6 +31,7 @@
     },
     "publisher": "MISTERNEGATIVE21",
     "targets": [
+      "appimage",
       "deb",
       "rpm"
     ],
