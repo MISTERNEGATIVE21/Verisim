@@ -117,6 +117,7 @@ interface IDEState {
   activeFile: VerilogFile | null;
   openFiles: VerilogFile[];
   setActiveFile: (file: VerilogFile | null) => void;
+  setOpenFiles: (files: VerilogFile[]) => void;
   openFile: (file: VerilogFile) => void;
   closeFile: (fileId: string) => void;
   updateFileContent: (fileId: string, content: string) => void;
@@ -238,6 +239,7 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   activeFile: null,
   openFiles: [],
   setActiveFile: (file) => set({ activeFile: file }),
+  setOpenFiles: (files) => set({ openFiles: files }),
   openFile: (file) => {
     const { openFiles } = get();
     if (!openFiles.find((f) => f.id === file.id)) {

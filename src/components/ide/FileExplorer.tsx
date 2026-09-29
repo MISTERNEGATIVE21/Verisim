@@ -316,6 +316,7 @@ export function FileExplorer() {
     activeFile,
     setActiveFile,
     openFiles,
+    setOpenFiles,
     openFile,
     closeFile,
     sidebarCollapsed,
@@ -649,6 +650,12 @@ endmodule
         f.id === oldId ? updatedFile : f
       );
       setProjectFiles(updatedFiles);
+
+      // Synchronize openFiles so open tabs do not retain stale name/id references
+      const updatedOpenFiles = openFiles.map((f) =>
+        f.id === oldId ? updatedFile : f
+      );
+      setOpenFiles(updatedOpenFiles);
 
       if (savedContentRef.current[oldId] !== undefined) {
         savedContentRef.current[updatedFile.id] = savedContentRef.current[oldId];
