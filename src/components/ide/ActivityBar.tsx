@@ -3,7 +3,6 @@
 import { useIDEStore, ActivityTab } from '@/store/ide-store';
 import { Files, Zap, Activity, Sparkles, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 
 interface NavItem {
   id: ActivityTab;
@@ -14,8 +13,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'files', label: 'Explorer', icon: Files, shortcut: 'Ctrl+Shift+E' },
-  { id: 'synth', label: 'RTL Gate Synthesis', icon: Zap },
-  { id: 'waveform', label: 'Waveform Traces', icon: Activity },
+  { id: 'synth', label: 'RTL Gate Synthesis', icon: Zap, shortcut: 'Ctrl+Shift+Y' },
+  { id: 'waveform', label: 'Waveform Traces', icon: Activity, shortcut: 'Ctrl+Shift+W' },
   { id: 'ai', label: 'HDL Assistant Studio', icon: Sparkles },
 ];
 
@@ -58,11 +57,11 @@ export function ActivityBar() {
 
   return (
     <aside
-      className="w-12 flex-shrink-0 bg-card/90 backdrop-blur border-r border-border/70 flex flex-col justify-between items-center py-2 z-40 select-none"
+      className="w-12 min-w-[48px] max-w-[48px] flex-shrink-0 bg-[#181818] border-r border-[#2b2b2b] flex flex-col justify-between items-center z-40 select-none"
       aria-label="Activity Bar"
     >
       {/* Primary Navigation Icons */}
-      <div className="flex flex-col items-center gap-1.5 w-full">
+      <div className="flex flex-col items-center w-full">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
@@ -71,69 +70,72 @@ export function ActivityBar() {
               : activeActivityTab === item.id && !sidebarCollapsed;
 
           return (
-            <div key={item.id} className="relative group w-full flex justify-center">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleTabClick(item.id)}
-                className={cn(
-                  'h-10 w-10 rounded-lg transition-all relative',
-                  isActive
-                    ? 'bg-primary/15 text-primary shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                )}
-                title={`${item.label}${item.shortcut ? ` (${item.shortcut})` : ''}`}
-              >
-                <Icon className={cn('h-5 w-5 transition-transform group-hover:scale-105', isActive && 'text-blue-500')} />
-                
-                {/* Active Indicator Bar on Left */}
-                {isActive && (
-                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-blue-500 rounded-r" />
-                )}
+            <button
+              key={item.id}
+              onClick={() => handleTabClick(item.id)}
+              className={cn(
+                'w-12 h-12 flex items-center justify-center relative transition-colors group cursor-pointer focus:outline-none',
+                isActive
+                  ? 'text-white'
+                  : 'text-[#858585] hover:text-[#e0e0e0] hover:bg-[#2a2d2e]'
+              )}
+              title={`${item.label}${item.shortcut ? ` (${item.shortcut})` : ''}`}
+              aria-label={item.label}
+              aria-pressed={isActive}
+            >
+              {/* Solid 2px left indicator accent bar in active state */}
+              {isActive && (
+                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#0078d4]" />
+              )}
 
-                {/* Synthesis Indicator Badge */}
-                {item.id === 'synth' && isSynthesizing && (
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+              <Icon
+                className={cn(
+                  'h-5 w-5 transition-transform duration-150 group-hover:scale-105',
+                  isActive ? 'text-white' : 'text-[#858585] group-hover:text-white'
                 )}
-                {item.id === 'synth' && synthesisResult && !isSynthesizing && (
-                  <span
-                    className={cn(
-                      'absolute top-1 right-1 w-1.5 h-1.5 rounded-full',
-                      synthesisResult.success ? 'bg-emerald-500' : 'bg-red-500'
-                    )}
-                  />
-                )}
-              </Button>
-            </div>
+              />
+
+              {/* Synthesis Indicator Badge */}
+              {item.id === 'synth' && isSynthesizing && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+              )}
+              {item.id === 'synth' && synthesisResult && !isSynthesizing && (
+                <span
+                  className={cn(
+                    'absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full',
+                    synthesisResult.success ? 'bg-emerald-500' : 'bg-red-500'
+                  )}
+                />
+              )}
+            </button>
           );
         })}
       </div>
 
       {/* Bottom EDA Toolchain Settings Button */}
-      <div className="flex flex-col items-center gap-1.5 w-full">
-        <div className="relative group w-full flex justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsToolchainModalOpen(true)}
-            className="h-10 w-10 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all relative"
-            title="EDA Toolchain & Compilation Settings"
-          >
-            <Settings className="h-5 w-5 transition-transform group-hover:rotate-45 duration-300" />
-            
-            {/* Status dot */}
-            {toolchainHealth && (
-              <span
-                className={cn(
-                  "absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-card",
-                  toolchainHealth.verilator.found && toolchainHealth.iverilog.found && toolchainHealth.yosys.found
-                    ? "bg-emerald-500"
-                    : "bg-amber-500"
-                )}
-              />
-            )}
-          </Button>
-        </div>
+      <div className="flex flex-col items-center w-full mb-1">
+        <button
+          onClick={() => setIsToolchainModalOpen(true)}
+          className="w-12 h-12 flex items-center justify-center relative transition-colors group cursor-pointer text-[#858585] hover:text-white hover:bg-[#2a2d2e] focus:outline-none"
+          title="EDA Toolchain & Compilation Settings"
+          aria-label="EDA Toolchain Settings"
+        >
+          <Settings className="h-5 w-5 transition-transform duration-300 group-hover:rotate-45" />
+
+          {/* Toolchain Health Status Dot */}
+          {toolchainHealth && (
+            <span
+              className={cn(
+                'absolute top-2.5 right-2.5 w-2 h-2 rounded-full ring-2 ring-[#181818]',
+                toolchainHealth.verilator.found &&
+                  toolchainHealth.iverilog.found &&
+                  toolchainHealth.yosys.found
+                  ? 'bg-emerald-500'
+                  : 'bg-amber-500'
+              )}
+            />
+          )}
+        </button>
       </div>
     </aside>
   );
