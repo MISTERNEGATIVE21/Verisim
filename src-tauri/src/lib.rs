@@ -56,7 +56,7 @@ pub struct SynthesisResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct ToolchainConfig {
     #[serde(default)]
     pub use_custom_paths: bool,
@@ -65,9 +65,11 @@ pub struct ToolchainConfig {
     pub verilator_path: Option<String>,
     pub yosys_path: Option<String>,
     pub python_path: Option<String>,
+    #[serde(default)]
+    pub gtkwave_path: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ToolStatus {
     pub name: String,
     pub found: bool,
@@ -76,47 +78,69 @@ pub struct ToolStatus {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ToolchainHealth {
     pub iverilog: ToolStatus,
     pub vvp: ToolStatus,
     pub verilator: ToolStatus,
     pub yosys: ToolStatus,
     pub python: ToolStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gtkwave: Option<ToolStatus>,
+}
+
+/// Searches candidate directories within an AppImage bundle environment ($APPDIR)
+pub fn find_appdir_toolchain(appdir: &Path) -> Option<PathBuf> {
+    let candidates = [
+        appdir.join("usr/lib/verisim-ide/toolchain"),
+        appdir.join("usr/lib/toolchain"),
+        appdir.join("toolchain"),
+    ];
+    for c in &candidates {
+        if c.join("bin").exists() {
+            return Some(c.clone());
+        }
+    }
+    None
+}
+
+/// Searches candidate directories relative to the current executable's parent directory
+pub fn find_exe_parent_toolchain(parent: &Path) -> Option<PathBuf> {
+    let candidates = [
+        parent.join("toolchain"),
+        parent.join("../lib/verisim-ide/toolchain"),
+        parent.join("../../usr/lib/verisim-ide/toolchain"),
+    ];
+    for c in &candidates {
+        if c.join("bin").exists() {
+            return Some(c.clone());
+        }
+    }
+    None
+}
+
+/// Searches candidate directories relative to the current working directory / workspace
+pub fn find_cwd_toolchain(cwd: &Path) -> Option<PathBuf> {
+    let candidates = [
+        cwd.join("src-tauri/toolchain"),
+        cwd.join("toolchain"),
+        cwd.join("../src-tauri/toolchain"),
+    ];
+    for c in &candidates {
+        if c.join("bin").exists() {
+            return Some(c.clone());
+        }
+    }
+    None
 }
 
 pub fn find_bundled_toolchain_dir(app_handle: Option<&tauri::AppHandle>) -> Option<PathBuf> {
     // 1. Check via app_handle resource_dir if available (Tauri v2 standard)
     if let Some(handle) = app_handle {
         if let Ok(res_dir) = handle.path().resource_dir() {
-            let candidate = res_dir.join("toolchain");
-            if candidate.join("bin").exists() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    // 2. Check APPDIR (AppImage environment)
-    if let Ok(appdir) = std::env::var("APPDIR") {
-        let candidates = [
-            Path::new(&appdir).join("usr/lib/verisim-ide/toolchain"),
-            Path::new(&appdir).join("usr/lib/toolchain"),
-            Path::new(&appdir).join("toolchain"),
-        ];
-        for c in &candidates {
-            if c.join("bin").exists() {
-                return Some(c.clone());
-            }
-        }
-    }
-
-    // 3. Check relative to current_exe
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
             let candidates = [
-                parent.join("toolchain"),
-                parent.join("../lib/verisim-ide/toolchain"),
-                parent.join("../../usr/lib/verisim-ide/toolchain"),
+                res_dir.join("toolchain"),
+                res_dir.join("usr/lib/verisim-ide/toolchain"),
             ];
             for c in &candidates {
                 if c.join("bin").exists() {
@@ -126,17 +150,29 @@ pub fn find_bundled_toolchain_dir(app_handle: Option<&tauri::AppHandle>) -> Opti
         }
     }
 
+    // 2. Check APPDIR (AppImage environment)
+    if let Ok(appdir) = std::env::var("APPDIR") {
+        let trimmed = appdir.trim();
+        if !trimmed.is_empty() {
+            if let Some(dir) = find_appdir_toolchain(Path::new(trimmed)) {
+                return Some(dir);
+            }
+        }
+    }
+
+    // 3. Check relative to current_exe
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if let Some(dir) = find_exe_parent_toolchain(parent) {
+                return Some(dir);
+            }
+        }
+    }
+
     // 4. Check relative to current_dir / workspace
     if let Ok(cwd) = std::env::current_dir() {
-        let candidates = [
-            cwd.join("src-tauri/toolchain"),
-            cwd.join("toolchain"),
-            cwd.join("../src-tauri/toolchain"),
-        ];
-        for c in &candidates {
-            if c.join("bin").exists() {
-                return Some(c.clone());
-            }
+        if let Some(dir) = find_cwd_toolchain(&cwd) {
+            return Some(dir);
         }
     }
 
@@ -268,6 +304,20 @@ pub fn resolve_tool(
     }
 }
 
+pub fn resolve_gtkwave_binary(
+    custom_path: Option<&str>,
+    bundled_dir: Option<&Path>,
+) -> String {
+    resolve_tool_binary("GTKWave", "gtkwave", custom_path, bundled_dir)
+}
+
+pub fn resolve_gtkwave(
+    custom_path: Option<&str>,
+    bundled_dir: Option<&Path>,
+) -> ToolStatus {
+    resolve_tool("GTKWave", "gtkwave", custom_path, "--version", bundled_dir)
+}
+
 pub fn check_toolchain_internal(
     bundled_dir: Option<&Path>,
     config: Option<ToolchainConfig>,
@@ -310,6 +360,10 @@ pub fn check_toolchain_internal(
         "--version",
         bundled_dir,
     );
+    let gtkwave = resolve_gtkwave(
+        if use_custom { cfg.gtkwave_path.as_deref() } else { None },
+        bundled_dir,
+    );
 
     Ok(ToolchainHealth {
         iverilog,
@@ -317,6 +371,7 @@ pub fn check_toolchain_internal(
         verilator,
         yosys,
         python,
+        gtkwave: Some(gtkwave),
     })
 }
 
@@ -324,6 +379,29 @@ pub fn check_toolchain_internal(
 fn check_toolchain(app: tauri::AppHandle, config: Option<ToolchainConfig>) -> Result<ToolchainHealth, String> {
     let bundled_dir = find_bundled_toolchain_dir(Some(&app));
     check_toolchain_internal(bundled_dir.as_deref(), config)
+}
+
+#[tauri::command]
+async fn open_in_gtkwave(
+    app: tauri::AppHandle,
+    vcd_path: String,
+    toolchain: Option<ToolchainConfig>,
+) -> Result<String, String> {
+    let tc = toolchain.unwrap_or_default();
+    let bundled_dir = find_bundled_toolchain_dir(Some(&app));
+    let gtkwave_bin = resolve_gtkwave_binary(
+        if tc.use_custom_paths { tc.gtkwave_path.as_deref() } else { None },
+        bundled_dir.as_deref(),
+    );
+
+    let mut cmd = Command::new(&gtkwave_bin);
+    cmd.arg(&vcd_path);
+    configure_tool_cmd(&mut cmd, bundled_dir.as_deref());
+
+    match cmd.spawn() {
+        Ok(_) => Ok(format!("Opened {} in GTKWave ({})", vcd_path, gtkwave_bin)),
+        Err(e) => Err(format!("Failed to launch GTKWave at '{}': {}", gtkwave_bin, e)),
+    }
 }
 
 pub fn detect_modules(content: &str) -> Vec<String> {
@@ -981,7 +1059,8 @@ pub fn run() {
             run_python,
             synthesize,
             read_external_files,
-            check_toolchain
+            check_toolchain,
+            open_in_gtkwave
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1107,6 +1186,10 @@ endmodule
         assert_eq!(health.yosys.name, "Yosys Synthesis");
         assert_eq!(health.python.name, "Python 3");
 
+        assert!(health.gtkwave.is_some());
+        let gtk = health.gtkwave.as_ref().unwrap();
+        assert_eq!(gtk.name, "GTKWave");
+
         // Verify that bundled tools were found
         assert!(health.yosys.found, "Yosys should be found in bundled toolchain");
         assert!(health.verilator.found, "Verilator should be found in bundled toolchain");
@@ -1119,5 +1202,165 @@ endmodule
         let status = resolve_tool("FakeTool", "definitely_nonexistent_binary_xyz_123", None, "--version", None);
         assert!(!status.found);
         assert!(status.error.is_some());
+    }
+
+    #[test]
+    fn test_find_appdir_toolchain() {
+        let temp_dir = std::env::temp_dir().join(format!("test_appdir_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // Case 1: usr/lib/verisim-ide/toolchain/bin
+        let path1 = temp_dir.join("usr/lib/verisim-ide/toolchain/bin");
+        fs::create_dir_all(&path1).unwrap();
+        let found1 = find_appdir_toolchain(&temp_dir);
+        assert_eq!(found1, Some(temp_dir.join("usr/lib/verisim-ide/toolchain")));
+
+        // Case 2: usr/lib/toolchain/bin (remove case 1 first)
+        let _ = fs::remove_dir_all(temp_dir.join("usr/lib/verisim-ide"));
+        let path2 = temp_dir.join("usr/lib/toolchain/bin");
+        fs::create_dir_all(&path2).unwrap();
+        let found2 = find_appdir_toolchain(&temp_dir);
+        assert_eq!(found2, Some(temp_dir.join("usr/lib/toolchain")));
+
+        // Case 3: toolchain/bin (remove case 2 first)
+        let _ = fs::remove_dir_all(temp_dir.join("usr/lib"));
+        let path3 = temp_dir.join("toolchain/bin");
+        fs::create_dir_all(&path3).unwrap();
+        let found3 = find_appdir_toolchain(&temp_dir);
+        assert_eq!(found3, Some(temp_dir.join("toolchain")));
+
+        // Case 4: No bin folder exists
+        let _ = fs::remove_dir_all(temp_dir.join("toolchain"));
+        let found4 = find_appdir_toolchain(&temp_dir);
+        assert_eq!(found4, None);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_exe_parent_and_cwd_toolchain() {
+        let temp_dir = std::env::temp_dir().join(format!("test_exe_parent_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // Test exe parent candidates:
+        // Candidate A: parent/toolchain/bin
+        let tc_a = temp_dir.join("toolchain/bin");
+        fs::create_dir_all(&tc_a).unwrap();
+        assert_eq!(find_exe_parent_toolchain(&temp_dir), Some(temp_dir.join("toolchain")));
+        let _ = fs::remove_dir_all(temp_dir.join("toolchain"));
+
+        // Candidate B: parent/../lib/verisim-ide/toolchain/bin
+        let bin_sub = temp_dir.join("bin_dir");
+        let tc_b = temp_dir.join("lib/verisim-ide/toolchain/bin");
+        fs::create_dir_all(&bin_sub).unwrap();
+        fs::create_dir_all(&tc_b).unwrap();
+        assert_eq!(find_exe_parent_toolchain(&bin_sub), Some(bin_sub.join("../lib/verisim-ide/toolchain")));
+
+        // Test find_cwd_toolchain
+        if let Ok(cwd) = std::env::current_dir() {
+            let found_cwd = find_cwd_toolchain(&cwd);
+            // In workspace root or src-tauri, toolchain or src-tauri/toolchain exists
+            assert!(found_cwd.is_some(), "CWD toolchain candidate should be located in workspace");
+        }
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_bundled_toolchain_appdir_env() {
+        let temp_dir = std::env::temp_dir().join(format!("test_appdir_env_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let mock_tc = temp_dir.join("usr/lib/verisim-ide/toolchain/bin");
+        fs::create_dir_all(&mock_tc).unwrap();
+
+        let old_appdir = std::env::var("APPDIR").ok();
+        std::env::set_var("APPDIR", &temp_dir);
+
+        let resolved = find_bundled_toolchain_dir(None);
+        assert_eq!(resolved, Some(temp_dir.join("usr/lib/verisim-ide/toolchain")));
+
+        // Restore environment
+        match old_appdir {
+            Some(v) => std::env::set_var("APPDIR", v),
+            None => std::env::remove_var("APPDIR"),
+        }
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_gtkwave_mock_and_binary() {
+        let temp_dir = std::env::temp_dir().join(format!("test_gtkwave_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let script_path = temp_dir.join("mock_gtkwave.sh");
+        let script_content = "#!/bin/sh\necho \"GTKWave Analyzer v3.3.118 (w)1999-2024 Bpt\"\n";
+        fs::write(&script_path, script_content).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&script_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&script_path, perms).unwrap();
+        }
+
+        let script_str = script_path.to_string_lossy().to_string();
+
+        // Test resolve_gtkwave_binary with custom path
+        let resolved_bin = resolve_gtkwave_binary(Some(&script_str), None);
+        assert_eq!(resolved_bin, script_str);
+
+        // Test resolve_gtkwave with custom path
+        let status = resolve_gtkwave(Some(&script_str), None);
+        assert!(status.found, "Mock GTKWave should be found");
+        assert!(status.version.contains("GTKWave Analyzer"), "Version should match mock script output");
+        assert_eq!(status.resolved_path, script_str);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_check_toolchain_with_custom_gtkwave() {
+        let mut cfg = ToolchainConfig::default();
+        cfg.use_custom_paths = true;
+        cfg.gtkwave_path = Some("/nonexistent/bin/gtkwave".to_string());
+
+        let health = check_toolchain_internal(None, Some(cfg)).expect("Toolchain check should succeed");
+        assert!(health.gtkwave.is_some());
+        let gtk = health.gtkwave.unwrap();
+        assert_eq!(gtk.name, "GTKWave");
+        assert!(!gtk.found);
+        assert!(gtk.error.is_some());
+    }
+
+    #[test]
+    fn test_toolchain_serde_backward_compatibility() {
+        // 1. ToolchainConfig deserialization without gtkwave_path (legacy frontend)
+        let legacy_cfg_json = r#"{"use_custom_paths":false,"iverilog_path":null}"#;
+        let parsed_cfg: ToolchainConfig = serde_json::from_str(legacy_cfg_json).unwrap();
+        assert_eq!(parsed_cfg.gtkwave_path, None);
+        assert!(!parsed_cfg.use_custom_paths);
+
+        // 2. ToolchainConfig deserialization with gtkwave_path
+        let new_cfg_json = r#"{"use_custom_paths":true,"gtkwave_path":"/usr/bin/gtkwave"}"#;
+        let parsed_new_cfg: ToolchainConfig = serde_json::from_str(new_cfg_json).unwrap();
+        assert_eq!(parsed_new_cfg.gtkwave_path, Some("/usr/bin/gtkwave".to_string()));
+        assert!(parsed_new_cfg.use_custom_paths);
+
+        // 3. ToolchainHealth deserialization without gtkwave (legacy frontend payload)
+        let legacy_health_json = r#"{
+            "iverilog":{"name":"Icarus","found":true,"resolved_path":"/bin/iverilog","version":"13.0","error":null},
+            "vvp":{"name":"VVP","found":true,"resolved_path":"/bin/vvp","version":"13.0","error":null},
+            "verilator":{"name":"Verilator","found":true,"resolved_path":"/bin/verilator","version":"5.0","error":null},
+            "yosys":{"name":"Yosys","found":true,"resolved_path":"/bin/yosys","version":"0.66","error":null},
+            "python":{"name":"Python 3","found":true,"resolved_path":"/bin/python3","version":"3.14","error":null}
+        }"#;
+        let parsed_health: ToolchainHealth = serde_json::from_str(legacy_health_json).unwrap();
+        assert_eq!(parsed_health.gtkwave, None);
+        assert!(parsed_health.iverilog.found);
+
+        // 4. ToolchainHealth serialization with gtkwave
+        let health = check_toolchain_internal(None, None).unwrap();
+        let serialized = serde_json::to_string(&health).unwrap();
+        assert!(serialized.contains("\"gtkwave\":"));
     }
 }
