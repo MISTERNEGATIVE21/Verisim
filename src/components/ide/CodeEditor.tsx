@@ -6,9 +6,21 @@ import Editor, { OnMount, BeforeMount, loader } from '@monaco-editor/react';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
-import { X, Sparkles } from 'lucide-react';
+import { 
+  X, 
+  Sparkles, 
+  Play, 
+  Code2, 
+  Columns2, 
+  FolderGit2, 
+  FolderTree, 
+  FileCode2, 
+  Boxes, 
+  ChevronRight 
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { runSimulation as tauriRunSimulation, runPythonScript } from '@/lib/tauri-db';
 import type { editor, languages } from 'monaco-editor';
 
 // Configure Monaco to load from bundled package (100% offline, zero CDN, zero AMD script injection)
@@ -171,7 +183,19 @@ export function CodeEditor() {
     autoSuggestEnabled,
     toggleAutoSuggest,
     highlightPrimitives,
-    highlightSystemTasks
+    highlightSystemTasks,
+    currentProject,
+    selectedEngine,
+    isSimulating,
+    setSimulating,
+    setSimulationResult,
+    isPythonRunning,
+    setPythonRunning,
+    setPythonResult,
+    setActiveDockTab,
+    setDockCollapsed,
+    waveformLayout,
+    toggleWaveformLayout,
   } = useIDEStore();
   
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -370,9 +394,83 @@ export function CodeEditor() {
     monaco.languages.registerCompletionItemProvider('systemverilog', completionProvider);
   };
   
-  const handleEditorDidMount: OnMount = (editor) => {
-    editorRef.current = editor;
+  const savedSnapshotsRef = useRef<Record<string, string>>({});
+  const [, setDirtyTick] = useState(0);
+
+  // Sync snapshot when files open
+  useEffect(() => {
+    for (const f of openFiles) {
+      if (savedSnapshotsRef.current[f.id] === undefined) {
+        savedSnapshotsRef.current[f.id] = f.content;
+      }
+    }
+  }, [openFiles]);
+
+  // Handle Ctrl+S / Cmd+S save
+  useEffect(() => {
+    const handleSaveShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (activeFile) {
+          savedSnapshotsRef.current[activeFile.id] = activeFile.content;
+          setDirtyTick((t) => t + 1);
+          toast.success(`Saved ${activeFile.name}`);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleSaveShortcut);
+    return () => window.removeEventListener('keydown', handleSaveShortcut);
+  }, [activeFile]);
+
+  const isFileDirty = (file: { id: string; content: string }) => {
+    const original = savedSnapshotsRef.current[file.id];
+    return original !== undefined && original !== file.content;
   };
+
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // Track cursor position for status bar
+    editor.onDidChangeCursorPosition((e) => {
+      window.dispatchEvent(new CustomEvent('verisim:cursor-change', {
+        detail: { line: e.position.lineNumber, col: e.position.column }
+      }));
+    });
+
+    const pos = editor.getPosition();
+    if (pos) {
+      window.dispatchEvent(new CustomEvent('verisim:cursor-change', {
+        detail: { line: pos.lineNumber, col: pos.column }
+      }));
+    }
+  };
+
+  // Listen to jump-to-line requests from diagnostics/breadcrumbs
+  useEffect(() => {
+    const handleJump = (e: Event) => {
+      const custom = e as CustomEvent<{ line: number }>;
+      if (custom.detail?.line && editorRef.current) {
+        editorRef.current.revealLineInCenter(custom.detail.line);
+        editorRef.current.setPosition({ lineNumber: custom.detail.line, column: 1 });
+        editorRef.current.focus();
+      }
+    };
+    window.addEventListener('verisim:jump-to-line', handleJump);
+    return () => window.removeEventListener('verisim:jump-to-line', handleJump);
+  }, []);
+
+  // Broadcast cursor when active file changes
+  useEffect(() => {
+    if (editorRef.current) {
+      const pos = editorRef.current.getPosition();
+      if (pos) {
+        window.dispatchEvent(new CustomEvent('verisim:cursor-change', {
+          detail: { line: pos.lineNumber, col: pos.column }
+        }));
+      }
+    }
+  }, [activeFile?.id]);
 
   // Re-apply tokens when highlight settings change
   useEffect(() => {
@@ -427,6 +525,119 @@ export function CodeEditor() {
     return <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded border border-blue-500/30">V</span>;
   };
 
+  // Detect module, interface, package, or class from active file
+  const symbolInfo = React.useMemo(() => {
+    if (!activeFile) return { name: '', kind: 'file', line: 1 };
+    const content = activeFile.content || '';
+    const fileName = activeFile.name;
+
+    if (fileName.endsWith('.py')) {
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const classMatch = lines[i].match(/^\s*class\s+([a-zA-Z0-9_]+)/);
+        if (classMatch) {
+          return { name: classMatch[1], kind: 'class', line: i + 1 };
+        }
+        const defMatch = lines[i].match(/^\s*def\s+([a-zA-Z0-9_]+)/);
+        if (defMatch) {
+          return { name: `${defMatch[1]}()`, kind: 'function', line: i + 1 };
+        }
+      }
+      return { name: fileName.replace(/\.[^/.]+$/, ''), kind: 'file', line: 1 };
+    }
+
+    // Verilog / SystemVerilog
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const modMatch = lines[i].match(/^\s*(?:module|interface|package|class)\s+([a-zA-Z0-9_$]+)/);
+      if (modMatch) {
+        return { name: modMatch[1], kind: 'module', line: i + 1 };
+      }
+    }
+
+    return { name: fileName.replace(/\.[^/.]+$/, ''), kind: 'module', line: 1 };
+  }, [activeFile?.id, activeFile?.content, activeFile?.name]);
+
+  const handleJumpToSymbol = () => {
+    if (editorRef.current && symbolInfo.line) {
+      editorRef.current.revealLineInCenter(symbolInfo.line);
+      editorRef.current.setPosition({ lineNumber: symbolInfo.line, column: 1 });
+      editorRef.current.focus();
+    }
+  };
+
+  // Run Current File action
+  const handleRunCurrentFile = async () => {
+    if (!activeFile || isSimulating || isPythonRunning) return;
+
+    if (activeFile.name.endsWith('.py')) {
+      setPythonRunning(true);
+      setPythonResult(null);
+      setActiveDockTab('python');
+      setDockCollapsed(false);
+      try {
+        const res = await runPythonScript(activeFile.name, currentProject?.files || [activeFile]);
+        setPythonResult(res);
+        if (res.success) {
+          toast.success(`Python script executed successfully`);
+        } else {
+          toast.error(`Python script execution failed`);
+        }
+      } catch (err: any) {
+        setPythonResult({
+          success: false,
+          output: `Error running script: ${err?.message || err}`,
+          exit_code: 1
+        });
+      } finally {
+        setPythonRunning(false);
+      }
+    } else {
+      setSimulating(true);
+      setSimulationResult(null);
+      setActiveDockTab('console');
+      setDockCollapsed(false);
+      try {
+        const res: any = await tauriRunSimulation(
+          currentProject?.id || 'default_proj',
+          currentProject?.files || [activeFile],
+          selectedEngine
+        );
+        setSimulationResult(res);
+        if (res.success) {
+          toast.success(`${selectedEngine === 'verilator' ? 'Verilator' : 'Icarus'} simulation passed`);
+          if (res.vcdContent) {
+            setActiveDockTab('waveform');
+          }
+        } else {
+          toast.error('Simulation finished with errors');
+        }
+      } catch (err: any) {
+        setSimulationResult({
+          success: false,
+          output: `Simulation error: ${err?.message || err}`,
+        });
+      } finally {
+        setSimulating(false);
+      }
+    }
+  };
+
+  // Format Code action
+  const handleFormatCode = () => {
+    if (!editorRef.current) return;
+    const formatAction = editorRef.current.getAction('editor.action.formatDocument');
+    if (formatAction) {
+      formatAction.run().then(() => {
+        toast.success('Document formatted');
+      }).catch(() => {
+        toast.info('Document formatted');
+      });
+    } else {
+      toast.info('Formatting document');
+    }
+  };
+
   if (openFiles.length === 0 || !activeFile) {
     return (
       <div className="h-full flex items-center justify-center bg-background">
@@ -443,52 +654,130 @@ export function CodeEditor() {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Tab Bar */}
-      <div className="flex items-center bg-muted/40 border-b border-border/60 overflow-x-auto select-none no-scrollbar">
-        {openFiles.map((file) => {
-          const isActive = activeFile.id === file.id;
-          return (
-            <div
-              key={file.id}
-              className={cn(
-                "group flex items-center gap-2 px-3 py-2 border-r border-border/40 cursor-pointer min-w-max text-xs transition-colors",
-                isActive 
-                  ? "bg-background text-foreground font-medium border-t-2 border-t-blue-500 shadow-sm" 
-                  : "bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              )}
-              onClick={() => setActiveFile(file)}
-            >
-              {getBadgeForFile(file.name)}
-              <span>{file.name}</span>
-              <button
-                className="opacity-0 group-hover:opacity-100 hover:bg-accent/40 rounded p-0.5 text-muted-foreground hover:text-foreground transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeFile(file.id);
+      {/* Top Tab Bar - VSCodium Dark Modern */}
+      <div className="flex items-center justify-between bg-[#181818] border-b border-[#252526] select-none min-h-[35px] h-[35px]">
+        <div className="flex items-center overflow-x-auto no-scrollbar h-full">
+          {openFiles.map((file) => {
+            const isActive = activeFile.id === file.id;
+            const dirty = isFileDirty(file);
+            return (
+              <div
+                key={file.id}
+                className={cn(
+                  "group flex items-center gap-2 px-3 h-full border-r border-[#252526] cursor-pointer min-w-max text-xs transition-colors relative",
+                  isActive 
+                    ? "bg-[#1e1e1e] text-white font-medium border-t-2 border-t-[#0078d4]" 
+                    : "bg-[#181818] text-[#969696] hover:bg-[#1f1f1f] hover:text-[#cccccc]"
+                )}
+                onClick={() => setActiveFile(file)}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    closeFile(file.id);
+                  }
                 }}
-                title="Close"
+                title={file.name}
               >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          );
-        })}
+                {getBadgeForFile(file.name)}
+                <span className="font-mono truncate max-w-[160px]">{file.name}</span>
+                <button
+                  className="flex items-center justify-center h-4 w-4 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all ml-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeFile(file.id);
+                  }}
+                  title={dirty ? "Unsaved changes (Ctrl+S to save)" : "Close (Ctrl+W)"}
+                >
+                  {dirty ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-white/70 group-hover:hidden" />
+                      <X className="h-3 w-3 hidden group-hover:block" />
+                    </>
+                  ) : (
+                    <X className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
 
-        {/* Suggestion Indicator badge in tab bar */}
-        <div className="ml-auto pr-3 flex items-center gap-2">
+        {/* Right Tab Bar Actions */}
+        <div className="flex items-center gap-0.5 px-2 border-l border-[#252526] h-full shrink-0">
+          <button
+            onClick={handleRunCurrentFile}
+            disabled={isSimulating || isPythonRunning}
+            className="p-1.5 rounded hover:bg-[#2a2d2e] text-[#cccccc] hover:text-white transition-colors disabled:opacity-50"
+            title="Run Current File"
+          >
+            <Play className="h-3.5 w-3.5 text-emerald-400 fill-emerald-400/20" />
+          </button>
+          <button
+            onClick={handleFormatCode}
+            className="p-1.5 rounded hover:bg-[#2a2d2e] text-[#cccccc] hover:text-white transition-colors"
+            title="Format Document"
+          >
+            <Code2 className="h-3.5 w-3.5 text-blue-400" />
+          </button>
+          <button
+            onClick={toggleWaveformLayout}
+            className={cn(
+              "p-1.5 rounded hover:bg-[#2a2d2e] text-[#cccccc] hover:text-white transition-colors",
+              waveformLayout === 'side-by-side' && "bg-[#2a2d2e] text-cyan-400"
+            )}
+            title="Split Editor Right (Waveform Layout)"
+          >
+            <Columns2 className="h-3.5 w-3.5 text-cyan-400" />
+          </button>
           <button
             onClick={toggleAutoSuggest}
             className={cn(
-              "flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors",
+              "flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ml-1",
               autoSuggestEnabled 
-                ? "bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20" 
-                : "bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/50"
+                ? "bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25" 
+                : "bg-muted/20 text-muted-foreground hover:bg-muted/40"
             )}
             title="Toggle Auto-Suggestions (Alt+A)"
           >
             <Sparkles className="h-3 w-3 text-blue-400" />
-            <span>Auto-Suggest: {autoSuggestEnabled ? 'ON' : 'OFF'}</span>
+            <span className="hidden sm:inline">Assist: {autoSuggestEnabled ? 'ON' : 'OFF'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Breadcrumb Navigation Bar */}
+      <div className="h-6 bg-[#1e1e1e] border-b border-[#252526] px-3 flex items-center gap-1.5 text-xs text-[#cccccc]/70 overflow-x-auto select-none no-scrollbar">
+        {/* Workspace */}
+        <div className="flex items-center gap-1 hover:text-white cursor-pointer transition-colors shrink-0">
+          <FolderGit2 className="h-3 w-3 text-blue-400" />
+          <span className="font-mono text-[11px]">workspace</span>
+        </div>
+        <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+
+        {/* Project */}
+        <div className="flex items-center gap-1 hover:text-white cursor-pointer transition-colors shrink-0">
+          <FolderTree className="h-3 w-3 text-amber-400" />
+          <span className="font-mono text-[11px]">{currentProject?.name || 'Project'}</span>
+        </div>
+        <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+
+        {/* Active File */}
+        <div className="flex items-center gap-1 hover:text-white cursor-pointer transition-colors shrink-0">
+          <FileCode2 className="h-3 w-3 text-cyan-400" />
+          <span className="font-mono text-[11px] text-foreground">{activeFile.name}</span>
+        </div>
+        <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+
+        {/* Detected Module / Class */}
+        <div 
+          className="flex items-center gap-1 hover:text-white cursor-pointer transition-colors shrink-0"
+          onClick={handleJumpToSymbol}
+          title={`Jump to ${symbolInfo.name} (Line ${symbolInfo.line})`}
+        >
+          <Boxes className="h-3 w-3 text-purple-400" />
+          <span className="font-mono text-[11px] text-purple-300 font-medium">
+            {symbolInfo.name}
+          </span>
         </div>
       </div>
       
